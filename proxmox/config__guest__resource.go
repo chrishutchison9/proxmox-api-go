@@ -128,6 +128,8 @@ type RawGuestResource interface {
 	GetUptime() time.Duration
 }
 
+var _ RawGuestResource = (*rawGuestResource)(nil)
+
 type rawGuestResource struct{ a map[string]any }
 
 // https://pve.proxmox.com/pve-docs/api-viewer/#/cluster/resources
