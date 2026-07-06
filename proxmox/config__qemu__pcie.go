@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Telmate/proxmox-api-go/internal/body"
 	"github.com/Telmate/proxmox-api-go/internal/util"
 )
 
@@ -12,24 +13,37 @@ type QemuPciDevices map[QemuPciID]QemuPci
 
 const QemuPciDevicesAmount = uint8(QemuPciIDMaximum) + 1
 
-func (config QemuPciDevices) mapToAPI(current QemuPciDevices, params map[string]interface{}) string {
-	var builder strings.Builder
+func (config QemuPciDevices) mapToApiCreate(b *strings.Builder) {
+	for i, e := range config {
+		if e.Delete {
+			continue
+		}
+		b.WriteString("&" + qemuPrefixApiKeyPCI)
+		b.WriteString(i.String())
+		b.WriteRune('=')
+		b.WriteString(e.mapToApiIntermediary(qemuPci{}).String())
+	}
+}
+
+func (config QemuPciDevices) mapToApiUpdate(current QemuPciDevices, b, delete *strings.Builder) {
 	for i, e := range config {
 		if v, isSet := current[i]; isSet {
 			if e.Delete {
-				builder.WriteString("," + qemuPrefixApiKeyPCI)
-				builder.WriteString(i.String())
+				delete.WriteString("," + qemuPrefixApiKeyPCI)
+				delete.WriteString(i.String())
 				continue
 			}
-			params[qemuPrefixApiKeyPCI+i.String()] = e.mapToAPI(&v)
+			e.mapToAPI(&v, i, b)
 		} else {
 			if e.Delete {
 				continue
 			}
-			params[qemuPrefixApiKeyPCI+i.String()] = e.mapToAPI(nil)
+			b.WriteString("&" + qemuPrefixApiKeyPCI)
+			b.WriteString(i.String())
+			b.WriteRune('=')
+			b.WriteString(e.mapToApiIntermediary(qemuPci{}).String())
 		}
 	}
-	return builder.String()
 }
 
 func (raw *rawConfigQemu) GetPciDevices() QemuPciDevices {
@@ -68,6 +82,14 @@ func (config QemuPciDevices) Validate(current QemuPciDevices) (err error) {
 	return nil
 }
 
+// QemuPciID
+//
+//	const (
+//		QemuPciID0
+//		...
+//		QemuPciID15
+//
+// )
 type QemuPciID uint8
 
 const (
@@ -103,19 +125,23 @@ func (id QemuPciID) Validate() error {
 }
 
 type QemuPci struct {
-	Delete  bool            `json:"delete,omitempty"`
 	Mapping *QemuPciMapping `json:"mapping,omitempty"`
 	Raw     *QemuPciRaw     `json:"raw,omitempty"`
+	Delete  bool            `json:"delete,omitempty"`
 }
 
 const QemuPci_Error_MutualExclusive string = "mapping and raw are mutually exclusive"
 
-func (config QemuPci) mapToAPI(current *QemuPci) string {
-	var usedConfig qemuPci
-	if current != nil {
-		usedConfig = current.mapToApiIntermediary(qemuPci{})
+func (config QemuPci) mapToAPI(current *QemuPci, id QemuPciID, b *strings.Builder) {
+	usedConfig := current.mapToApiIntermediary(qemuPci{})
+	currentStr := usedConfig.String()
+	newStr := config.mapToApiIntermediary(usedConfig).String()
+	if currentStr != newStr {
+		b.WriteString("&" + qemuPrefixApiKeyPCI)
+		b.WriteString(id.String())
+		b.WriteRune('=')
+		b.WriteString(newStr)
 	}
-	return config.mapToApiIntermediary(usedConfig).String()
 }
 
 func (QemuPci) mapToSDK(raw string) QemuPci {
@@ -278,17 +304,17 @@ func (config QemuPci) Validate(current QemuPci) error {
 // TODO add [,legacy-igd=<1|0>]
 // TODO add [,romfile=<string>]
 type qemuPci struct {
+	deviceID    PciDeviceID // [,device-id=<hex id>]
 	enum        qemuPciEnum
 	mappingID   ResourceMappingPciID // [,mapping=<mapping-id>]
+	mDev        PciMediatedDevice    // [,mdev=<string>]
 	rawID       PciID                // [[host=]<HOSTPCIID[;HOSTPCIID2...]>]
+	subDeviceID PciSubDeviceID       // [,sub-device-id=<hex id>]
+	subVendorID PciSubVendorID       // [,sub-vendor-id=<hex id>]
+	vendorID    PciVendorID          // [,vendor-id=<hex id>]
 	pCIe        bool                 // [,pcie=<1|0>] // only in key when true
 	primaryGPU  bool                 // [,x-vga=<1|0>] // only in key when true
 	romBar      bool                 // [,rombar=<1|0>] // only in key when false
-	vendorID    PciVendorID          // [,vendor-id=<hex id>]
-	deviceID    PciDeviceID          // [,device-id=<hex id>]
-	subVendorID PciSubVendorID       // [,sub-vendor-id=<hex id>]
-	subDeviceID PciSubDeviceID       // [,sub-device-id=<hex id>]
-	mDev        PciMediatedDevice    // [,mdev=<string>]
 }
 
 const (
@@ -301,43 +327,43 @@ const (
 
 func (config qemuPci) String() string { // String is for fmt.Stringer.
 	var builder strings.Builder
+	switch config.enum {
+	case qemuPCciEnumMapping:
+		builder.WriteString("mapping" + equal)
+		builder.WriteString(config.mappingID.String())
+	case qemuPciEnumRaw:
+		builder.WriteString(body.Escape(config.rawID.String()))
+	}
 	if config.pCIe {
-		builder.WriteString(",pcie=1")
+		builder.WriteString(comma + "pcie" + equal + "1")
 	}
 	if config.primaryGPU {
-		builder.WriteString(",x-vga=1")
+		builder.WriteString(comma + "x-vga" + equal + "1")
 	}
 	if !config.romBar {
-		builder.WriteString(",rombar=0")
+		builder.WriteString(comma + "rombar" + equal + "0")
 	}
 	if config.vendorID != "" {
-		builder.WriteString(",vendor-id=")
+		builder.WriteString(comma + "vendor-id" + equal)
 		builder.WriteString(config.vendorID.String())
 	}
 	if config.deviceID != "" {
-		builder.WriteString(",device-id=")
+		builder.WriteString(comma + "device-id" + equal)
 		builder.WriteString(config.deviceID.String())
 	}
 	if config.subVendorID != "" {
-		builder.WriteString(",sub-vendor-id=")
+		builder.WriteString(comma + "sub-vendor-id" + equal)
 		builder.WriteString(config.subVendorID.String())
 	}
 	if config.subDeviceID != "" {
-		builder.WriteString(",sub-device-id=")
+		builder.WriteString(comma + "sub-device-id" + equal)
 		builder.WriteString(config.subDeviceID.String())
 	}
 	if config.mDev != "" {
-		builder.WriteString(",mdev=")
+		builder.WriteString(comma + "mdev" + equal)
 		builder.WriteString(config.mDev.String())
 	}
-	var settings string
-	switch config.enum {
-	case qemuPCciEnumMapping:
-		settings = "mapping=" + string(config.mappingID)
-	case qemuPciEnumRaw:
-		settings = config.rawID.String()
-	}
-	return settings + builder.String()
+	return builder.String()
 }
 
 type qemuPciEnum bool

@@ -401,10 +401,6 @@ func (config *ConfigQemu) mapToAPI(currentConfig ConfigQemu, version Version) (p
 		params["vga"] = strings.Join(vgaParam, ",")
 	}
 
-	if config.PciDevices != nil {
-		itemsToDelete += config.PciDevices.mapToAPI(currentConfig.PciDevices, params)
-	}
-
 	if itemsToDelete != "" {
 		params["delete"] = strings.TrimPrefix(itemsToDelete, ",")
 	}
@@ -431,6 +427,9 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 	}
 	if config.EfiDisk != nil {
 		config.EfiDisk.mapToApiCreate(bPtr)
+	}
+	if config.PciDevices != nil {
+		config.PciDevices.mapToApiCreate(bPtr)
 	}
 	if config.State != nil && *config.State == PowerStateRunning {
 		builder.WriteString("&start=1")
@@ -483,6 +482,13 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 			config.EfiDisk.mapToApiUpdate(current.efiDisk, bPtr, deletePtr)
 		} else {
 			config.EfiDisk.mapToApiCreate(bPtr)
+		}
+	}
+	if config.PciDevices != nil {
+		if currentLegacy.PciDevices != nil {
+			config.PciDevices.mapToApiUpdate(currentLegacy.PciDevices, bPtr, deletePtr)
+		} else {
+			config.PciDevices.mapToApiCreate(bPtr)
 		}
 	}
 	if config.Tags != nil {

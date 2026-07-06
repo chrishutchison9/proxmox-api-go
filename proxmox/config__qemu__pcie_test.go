@@ -8,6 +8,303 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_ConfigQemu_PciDevices_MapToApi(t *testing.T) {
+	t.Parallel()
+	tests := qemuTestsApiFunc(func() qemuTestsAPI {
+		return qemuTestsAPI{
+			create: []qemuTestCaseAPI{
+				{name: `Delete`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Delete: true}}}}},
+			createUpdate: []qemuTestCaseAPI{
+				{name: `Mapping.DeviceID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID15: QemuPci{Mapping: &QemuPciMapping{
+							DeviceID: new(PciDeviceID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID15: QemuPci{Mapping: &QemuPciMapping{
+							DeviceID: new(PciDeviceID("0x8000"))}}}},
+					body: map[string]string{"hostpci15": "mapping%3D%2Crombar%3D0%2Cdevice-id%3D0x8086"}}, // "mapping=,rombar=0,device-id=0x8086"
+				{name: `Mapping.ID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							ID: new(ResourceMappingPciID("aaaaa"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							ID: new(ResourceMappingPciID("bbbbb"))}}}},
+					body: map[string]string{"hostpci14": "mapping%3Daaaaa%2Crombar%3D0"}}, // "mapping=aaaaa,rombar=0"
+				{name: `MApping.MDev`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							MDev: new(PciMediatedDevice("vendor-665"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							MDev: new(PciMediatedDevice(PciMediatedDevice("vendor-000")))}}}},
+					body: map[string]string{"hostpci14": "mapping%3D%2Crombar%3D0%2Cmdev%3Dvendor-665"}}, // "mapping=,rombar=0,mdev=vendor-665"
+				{name: `Mapping.Pci`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID13: QemuPci{Mapping: &QemuPciMapping{
+							PCIe: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID13: QemuPci{Mapping: &QemuPciMapping{
+							PCIe: new(false)}}}},
+					body: map[string]string{"hostpci13": "mapping%3D%2Cpcie%3D1%2Crombar%3D0"}}, // "mapping=,pcie=1,rombar=0"
+				{name: `Mapping.PrimaryGPU`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID12: QemuPci{Mapping: &QemuPciMapping{
+							PrimaryGPU: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID12: QemuPci{Mapping: &QemuPciMapping{
+							PrimaryGPU: new(false)}}}},
+					body: map[string]string{"hostpci12": "mapping%3D%2Cx-vga%3D1%2Crombar%3D0"}}, // "mapping=,x-vga=1,rombar=0"
+				{name: `Mapping.ROMbar`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID11: QemuPci{Mapping: &QemuPciMapping{
+							ROMbar: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID11: QemuPci{Mapping: &QemuPciMapping{
+							ROMbar: new(false)}}}},
+					body: map[string]string{"hostpci11": "mapping%3D"}}, // "mapping="
+				{name: `Mapping.SubDeviceID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID10: QemuPci{Mapping: &QemuPciMapping{
+							SubDeviceID: new(PciSubDeviceID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID10: QemuPci{Mapping: &QemuPciMapping{
+							SubDeviceID: new(PciSubDeviceID("0x8000"))}}}},
+					body: map[string]string{"hostpci10": "mapping%3D%2Crombar%3D0%2Csub-device-id%3D0x8086"}}, // "mapping=,rombar=0,sub-device-id=0x8086"
+				{name: `Mapping.SubVendorID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID9: QemuPci{Mapping: &QemuPciMapping{
+							SubVendorID: new(PciSubVendorID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID9: QemuPci{Mapping: &QemuPciMapping{
+							SubVendorID: new(PciSubVendorID("0x8000"))}}}},
+					body: map[string]string{"hostpci9": "mapping%3D%2Crombar%3D0%2Csub-vendor-id%3D0x8086"}}, // "mapping=,rombar=0,sub-vendor-id=0x8086"
+				{name: `Mapping.VendorID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID8: QemuPci{Mapping: &QemuPciMapping{
+							VendorID: new(PciVendorID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID8: QemuPci{Mapping: &QemuPciMapping{
+							VendorID: new(PciVendorID("0x8000"))}}}},
+					body: map[string]string{"hostpci8": "mapping%3D%2Crombar%3D0%2Cvendor-id%3D0x8086"}}, // "mapping=,rombar=0,vendor-id=0x8086"
+				{name: `Raw.DeviceID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID0: QemuPci{Raw: &QemuPciRaw{
+							DeviceID: new(PciDeviceID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID0: QemuPci{Raw: &QemuPciRaw{
+							DeviceID: new(PciDeviceID("0x8000"))}}}},
+					body: map[string]string{"hostpci0": "%2Crombar%3D0%2Cdevice-id%3D0x8086"}}, // ",rombar=0,device-id=0x8086"
+				{name: `Raw.ID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID1: QemuPci{Raw: &QemuPciRaw{
+							ID: new(PciID("0000:00:00.0"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID1: QemuPci{Raw: &QemuPciRaw{
+							ID: new(PciID("0000:00:00.1"))}}}},
+					body: map[string]string{"hostpci1": "0000%3A00%3A00.0%2Crombar%3D0"}}, // "0000:00:00.0,rombar=0"
+				{name: `Raw.MDev`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							MDev: new(PciMediatedDevice("vendor-665"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							MDev: new(PciMediatedDevice("vendor-000"))}}}},
+					body: map[string]string{"hostpci2": "%2Crombar%3D0%2Cmdev%3Dvendor-665"}}, // ",rombar=0,mdev=vendor-665"
+				{name: `Raw.Pci`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							PCIe: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							PCIe: new(false)}}}},
+					body: map[string]string{"hostpci2": "%2Cpcie%3D1%2Crombar%3D0"}}, // ",pcie=1,rombar=0"
+				{name: `Raw.PrimaryGPU`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID3: QemuPci{Raw: &QemuPciRaw{
+							PrimaryGPU: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID3: QemuPci{Raw: &QemuPciRaw{
+							PrimaryGPU: new(false)}}}},
+					body: map[string]string{"hostpci3": "%2Cx-vga%3D1%2Crombar%3D0"}}, // ",x-vga=1,rombar=0"
+				{name: `Raw.ROMbar`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{Raw: &QemuPciRaw{
+							ROMbar: new(true)}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{Raw: &QemuPciRaw{
+							ROMbar: new(false)}}}},
+					body: map[string]string{"hostpci4": ""}},
+				{name: `Raw.SubDeviceID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Raw: &QemuPciRaw{
+							SubDeviceID: new(PciSubDeviceID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Raw: &QemuPciRaw{
+							SubDeviceID: new(PciSubDeviceID("0x8000"))}}}},
+					body: map[string]string{"hostpci5": "%2Crombar%3D0%2Csub-device-id%3D0x8086"}}, // ",rombar=0,sub-device-id=0x8086"
+				{name: `Raw.SubVendorID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID6: QemuPci{Raw: &QemuPciRaw{
+							SubVendorID: new(PciSubVendorID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID6: QemuPci{Raw: &QemuPciRaw{
+							SubVendorID: new(PciSubVendorID("0x8000"))}}}},
+					body: map[string]string{"hostpci6": "%2Crombar%3D0%2Csub-vendor-id%3D0x8086"}}, // ",rombar=0,sub-vendor-id=0x8086"
+				{name: `Raw.VendorID`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID7: QemuPci{Raw: &QemuPciRaw{
+							VendorID: new(PciVendorID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID7: QemuPci{Raw: &QemuPciRaw{
+							VendorID: new(PciVendorID("0x8000"))}}}},
+					body: map[string]string{"hostpci7": "%2Crombar%3D0%2Cvendor-id%3D0x8086"}}}, // ",rombar=0,vendor-id=0x8086"
+			update: []qemuTestCaseAPI{
+				{name: `Delete`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Delete: true}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{}}},
+					body: map[string]string{"delete": "hostpci5"}},
+				{name: `Delete create no effect`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Delete: true}}}},
+				{name: `Delete no effect`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Delete: true}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID7: QemuPci{}}}},
+				{name: `Mapping.DeviceID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID15: QemuPci{Mapping: &QemuPciMapping{
+							DeviceID: new(PciDeviceID("8086"))}}}},
+					body: map[string]string{"hostpci15": "mapping%3D%2Crombar%3D0%2Cdevice-id%3D0x8086"}}, // "mapping=,rombar=0,device-id=0x8086"
+				{name: `Mapping.ID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							ID: new(ResourceMappingPciID("aaaaa"))}}}},
+					body: map[string]string{"hostpci14": "mapping%3Daaaaa%2Crombar%3D0"}}, // "mapping=aaaaa,rombar=0"
+				{name: `MApping.MDev create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID14: QemuPci{Mapping: &QemuPciMapping{
+							MDev: new(PciMediatedDevice("vendor-665"))}}}},
+					body: map[string]string{"hostpci14": "mapping%3D%2Crombar%3D0%2Cmdev%3Dvendor-665"}}, // "mapping=,rombar=0,mdev=vendor-665"
+				{name: `Mapping.Pci create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID13: QemuPci{Mapping: &QemuPciMapping{
+							PCIe: new(true)}}}},
+					body: map[string]string{"hostpci13": "mapping%3D%2Cpcie%3D1%2Crombar%3D0"}}, // "mapping=,pcie=1,rombar=0"
+				{name: `Mapping.PrimaryGPU create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID12: QemuPci{Mapping: &QemuPciMapping{
+							PrimaryGPU: new(true)}}}},
+					body: map[string]string{"hostpci12": "mapping%3D%2Cx-vga%3D1%2Crombar%3D0"}}, // "mapping=,x-vga=1,rombar=0"
+				{name: `Mapping.ROMbar create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID11: QemuPci{Mapping: &QemuPciMapping{
+							ROMbar: new(true)}}}},
+					body: map[string]string{"hostpci11": "mapping%3D"}}, // "mapping="
+				{name: `Mapping.SubDeviceID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID10: QemuPci{Mapping: &QemuPciMapping{
+							SubDeviceID: new(PciSubDeviceID("8086"))}}}},
+					body: map[string]string{"hostpci10": "mapping%3D%2Crombar%3D0%2Csub-device-id%3D0x8086"}}, // "mapping=,rombar=0,sub-device-id=0x8086"
+				{name: `Mapping.SubVendorID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID9: QemuPci{Mapping: &QemuPciMapping{
+							SubVendorID: new(PciSubVendorID("8086"))}}}},
+					body: map[string]string{"hostpci9": "mapping%3D%2Crombar%3D0%2Csub-vendor-id%3D0x8086"}}, // "mapping=,rombar=0,sub-vendor-id=0x8086"
+				{name: `Mapping.VendorID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID8: QemuPci{Mapping: &QemuPciMapping{
+							VendorID: new(PciVendorID("8086"))}}}},
+					body: map[string]string{"hostpci8": "mapping%3D%2Crombar%3D0%2Cvendor-id%3D0x8086"}}, // "mapping=,rombar=0,vendor-id=0x8086"
+				{name: `Raw.DeviceID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID0: QemuPci{Raw: &QemuPciRaw{
+							DeviceID: new(PciDeviceID("8086"))}}}},
+					body: map[string]string{"hostpci0": "%2Crombar%3D0%2Cdevice-id%3D0x8086"}}, // ",rombar=0,device-id=0x8086"
+				{name: `Raw.ID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID1: QemuPci{Raw: &QemuPciRaw{
+							ID: new(PciID("0000:00:00.0"))}}}},
+					body: map[string]string{"hostpci1": "0000%3A00%3A00.0%2Crombar%3D0"}}, // "0000:00:00.0,rombar=0"
+				{name: `Raw.MDev create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							MDev: new(PciMediatedDevice("vendor-665"))}}}},
+					body: map[string]string{"hostpci2": "%2Crombar%3D0%2Cmdev%3Dvendor-665"}}, // ",rombar=0,mdev=vendor-665"
+				{name: `Raw.Pci create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID2: QemuPci{Raw: &QemuPciRaw{
+							PCIe: new(true)}}}},
+					body: map[string]string{"hostpci2": "%2Cpcie%3D1%2Crombar%3D0"}}, // ",pcie=1,rombar=0"
+				{name: `Raw.PrimaryGPU create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID3: QemuPci{Raw: &QemuPciRaw{
+							PrimaryGPU: new(true)}}}},
+					body: map[string]string{"hostpci3": "%2Cx-vga%3D1%2Crombar%3D0"}}, // ",x-vga=1,rombar=0"
+				{name: `Raw.ROMbar create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{Raw: &QemuPciRaw{
+							ROMbar: new(true)}}}},
+					body: map[string]string{"hostpci4": ""}},
+				{name: `Raw.SubDeviceID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID5: QemuPci{Raw: &QemuPciRaw{
+							SubDeviceID: new(PciSubDeviceID("8086"))}}}},
+					body: map[string]string{"hostpci5": "%2Crombar%3D0%2Csub-device-id%3D0x8086"}}, // ",rombar=0,sub-device-id=0x8086"
+				{name: `Raw.SubVendorID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID6: QemuPci{Raw: &QemuPciRaw{
+							SubVendorID: new(PciSubVendorID("8086"))}}}},
+					body: map[string]string{"hostpci6": "%2Crombar%3D0%2Csub-vendor-id%3D0x8086"}}, // ",rombar=0,sub-vendor-id=0x8086"
+				{name: `Raw.VendorID create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID7: QemuPci{Raw: &QemuPciRaw{
+							VendorID: new(PciVendorID("8086"))}}}},
+					body: map[string]string{"hostpci7": "%2Crombar%3D0%2Cvendor-id%3D0x8086"}},
+				{name: `Raw.VendorID update create`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID7: QemuPci{Raw: &QemuPciRaw{
+							VendorID: new(PciVendorID("8086"))}}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{QemuPciID10: QemuPci{}}},
+					body:          map[string]string{"hostpci7": "%2Crombar%3D0%2Cvendor-id%3D0x8086"}},
+				{name: `same`,
+					config: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{
+							Mapping: &QemuPciMapping{
+								DeviceID:    new(PciDeviceID("8086")),
+								ID:          new(ResourceMappingPciID("aaaaa")),
+								MDev:        new(PciMediatedDevice("vendor-665")),
+								PCIe:        new(false),
+								PrimaryGPU:  new(true),
+								ROMbar:      new(false),
+								SubDeviceID: new(PciSubDeviceID("4522")),
+								SubVendorID: new(PciSubVendorID("74526")),
+								VendorID:    new(PciVendorID("2321"))},
+						}}},
+					currentLegacy: ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{
+							Mapping: &QemuPciMapping{
+								DeviceID:    new(PciDeviceID("8086")),
+								ID:          new(ResourceMappingPciID("aaaaa")),
+								MDev:        new(PciMediatedDevice("vendor-665")),
+								PCIe:        new(false),
+								PrimaryGPU:  new(true),
+								ROMbar:      new(false),
+								SubDeviceID: new(PciSubDeviceID("4522")),
+								SubVendorID: new(PciSubVendorID("74526")),
+								VendorID:    new(PciVendorID("2321"))},
+						}}},
+				},
+			}}
+	})
+	tests.Test(t)
+}
+
 func Test_QemuPciDevices_Validate(t *testing.T) {
 	t.Parallel()
 	type testInput struct {
