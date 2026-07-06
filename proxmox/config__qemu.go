@@ -414,12 +414,13 @@ func (config *ConfigQemu) mapToAPI(currentConfig ConfigQemu, version Version) (p
 func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byte) {
 	params := config.mapToAPI(ConfigQemu{}, version)
 	builder := strings.Builder{}
+	bPtr := &builder
 	if config.Architecture != nil {
 		builder.WriteString("&" + qemuApiKeyArchitecture + "=")
 		builder.WriteString(config.Architecture.String())
 	}
 	if config.CPU != nil {
-		config.CPU.mapToApiCreate(version, &builder)
+		config.CPU.mapToApiCreate(version, bPtr)
 	}
 	if config.Description != nil && *config.Description != "" {
 		builder.WriteString("&" + qemuApiKeyDescription + "=")
@@ -429,7 +430,7 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 		config.Disks.mapToApiCreate(params)
 	}
 	if config.EfiDisk != nil {
-		config.EfiDisk.mapToApiCreate(&builder)
+		config.EfiDisk.mapToApiCreate(bPtr)
 	}
 	if config.State != nil && *config.State == PowerStateRunning {
 		builder.WriteString("&start=1")
@@ -441,10 +442,10 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 		}
 	}
 	if config.USBs != nil {
-		config.USBs.mapToApiCreate(&builder)
+		config.USBs.mapToApiCreate(bPtr)
 	}
 	if config.Watchdog != nil && !config.Watchdog.Delete {
-		config.Watchdog.mapToApiCreate(&builder)
+		config.Watchdog.mapToApiCreate(bPtr)
 	}
 	if len(params) == 0 {
 		params = nil
@@ -458,9 +459,11 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current configQemuUpdate, version Version) (map[string]any, *[]byte) {
 	params := config.mapToAPI(*currentLegacy, version)
 	builder := strings.Builder{}
+	bPtr := &builder
 	delete := strings.Builder{}
+	deletePtr := &delete
 	if config.CPU != nil {
-		config.CPU.mapToApiUpdate(*currentLegacy.CPU, version, &builder, &delete)
+		config.CPU.mapToApiUpdate(*currentLegacy.CPU, version, bPtr, deletePtr)
 	}
 	if config.Description != nil {
 		if *config.Description != current.raw.GetDescription() {
@@ -470,16 +473,16 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 	}
 	if config.Disks != nil {
 		if current.disks != nil { // Update
-			config.Disks.mapToApiUpdate(*current.disks, params, &delete)
+			config.Disks.mapToApiUpdate(*current.disks, params, deletePtr)
 		} else { // Create
 			config.Disks.mapToApiCreate(params)
 		}
 	}
 	if config.EfiDisk != nil {
 		if current.efiDisk != nil {
-			config.EfiDisk.mapToApiUpdate(current.efiDisk, &builder, &delete)
+			config.EfiDisk.mapToApiUpdate(current.efiDisk, bPtr, deletePtr)
 		} else {
-			config.EfiDisk.mapToApiCreate(&builder)
+			config.EfiDisk.mapToApiCreate(bPtr)
 		}
 	}
 	if config.Tags != nil {
@@ -497,16 +500,16 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 	}
 	if config.USBs != nil {
 		if currentLegacy.USBs != nil {
-			config.USBs.mapToApiUpdate(currentLegacy.USBs, &builder, &delete)
+			config.USBs.mapToApiUpdate(currentLegacy.USBs, bPtr, deletePtr)
 		} else if len(config.USBs) > 0 {
-			config.USBs.mapToApiCreate(&builder)
+			config.USBs.mapToApiCreate(bPtr)
 		}
 	}
 	if config.Watchdog != nil {
 		if currentLegacy.Watchdog != nil {
-			config.Watchdog.mapToApiUpdate(currentLegacy.Watchdog, &builder, &delete)
+			config.Watchdog.mapToApiUpdate(currentLegacy.Watchdog, bPtr, deletePtr)
 		} else if !config.Watchdog.Delete {
-			config.Watchdog.mapToApiCreate(&builder)
+			config.Watchdog.mapToApiCreate(bPtr)
 		}
 	}
 
