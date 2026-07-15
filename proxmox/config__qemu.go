@@ -813,7 +813,7 @@ func (config ConfigQemu) updateNoCheck(
 	}
 
 	if rebootRequired {
-		if allowRestart {
+		if !allowRestart {
 			return true, errors.New(ConfigQemu_Error_UnableToUpdateWithoutReboot)
 		}
 		if err = vmr.reboot_Unsafe(ctx, c); err != nil {
