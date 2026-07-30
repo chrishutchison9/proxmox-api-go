@@ -923,11 +923,6 @@ func (config ConfigQemu) Validate(current *ConfigQemu, version Version) (err err
 				return
 			}
 		}
-		if config.PciDevices != nil {
-			if err = config.PciDevices.Validate(nil); err != nil {
-				return
-			}
-		}
 		if config.RandomnessDevice != nil {
 			if err = config.RandomnessDevice.validateCreate(); err != nil {
 				return
@@ -954,11 +949,6 @@ func (config ConfigQemu) Validate(current *ConfigQemu, version Version) (err err
 		}
 		if config.Networks != nil {
 			if err = config.Networks.Validate(current.Networks); err != nil {
-				return
-			}
-		}
-		if config.PciDevices != nil {
-			if err = config.PciDevices.Validate(current.PciDevices); err != nil {
 				return
 			}
 		}
@@ -1029,6 +1019,11 @@ func (config ConfigQemu) validateCreate(version Version) error {
 			return err
 		}
 	}
+	if config.PciDevices != nil {
+		if err := config.PciDevices.validateCreate(); err != nil {
+			return err
+		}
+	}
 	if config.USBs != nil {
 		if err := config.USBs.validateCreate(); err != nil {
 			return err
@@ -1042,46 +1037,53 @@ func (config ConfigQemu) validateCreate(version Version) error {
 	return nil
 }
 
-func (config ConfigQemu) validateUpdate(current *ConfigQemu, version Version) error {
+func (config ConfigQemu) validateUpdate(current *ConfigQemu, version Version) (err error) {
 	if config.CPU != nil {
-		if err := config.CPU.validateUpdate(current.CPU, version); err != nil {
-			return err
+		if err = config.CPU.validateUpdate(current.CPU, version); err != nil {
+			return
 		}
 	}
 	if config.EfiDisk != nil {
 		if current.EfiDisk != nil { // update
-			if err := config.EfiDisk.validateUpdate(); err != nil {
-				return err
-			}
+			err = config.EfiDisk.validateUpdate()
 		} else { // create
-			if err := config.EfiDisk.validateCreate(); err != nil {
-				return err
-			}
+			err = config.EfiDisk.validateCreate()
+		}
+		if err != nil {
+			return
+		}
+	}
+	if config.PciDevices != nil {
+		if len(current.PciDevices) > 0 { // update
+			err = config.PciDevices.validateUpdate(current.PciDevices)
+		} else {
+			err = config.PciDevices.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
 	if config.USBs != nil {
 		if len(current.USBs) > 0 { // update
-			if err := config.USBs.validateUpdate(current.USBs); err != nil {
-				return err
-			}
+			err = config.USBs.validateUpdate(current.USBs)
 		} else {
-			if err := config.USBs.validateCreate(); err != nil {
-				return err
-			}
+			err = config.USBs.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
 	if config.Watchdog != nil {
 		if current.Watchdog != nil { // update
-			if err := config.Watchdog.validateUpdate(); err != nil {
-				return err
-			}
+			err = config.Watchdog.validateUpdate()
 		} else { // create
-			if err := config.Watchdog.validateCreate(); err != nil {
-				return err
-			}
+			err = config.Watchdog.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
-	return nil
+	return
 }
 
 /*

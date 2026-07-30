@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Telmate/proxmox-api-go/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -305,156 +304,325 @@ func Test_ConfigQemu_PciDevices_MapToApi(t *testing.T) {
 	tests.Test(t)
 }
 
-func Test_QemuPciDevices_Validate(t *testing.T) {
-	t.Parallel()
-	type testInput struct {
-		config  QemuPciDevices
-		current QemuPciDevices
-	}
-	tests := []struct {
-		name   string
-		input  testInput
-		output error
-	}{
-		{name: `Valid Delete`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID0: QemuPci{Delete: true}}}},
-		{name: `Valid Mapping update`,
-			input: testInput{
-				config: QemuPciDevices{
-					QemuPciID1: QemuPci{
-						Mapping: &QemuPciMapping{}}},
-				current: QemuPciDevices{
-					QemuPciID1: QemuPci{
+func testData_ConfigQemu_PciDevices_Validate() qemuTestTypeValidateFunc {
+	return qemuTestTypeValidateFunc(func() (qemuTestTypeInvalid, qemuTestTypeValid) {
+		invalid := qemuTestTypeInvalid{
+			createUpdate: []qemuTestCaseInvalid{
+				{name: `errors.New(QemuPci_Error_MutualExclusive)`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID12: QemuPci{
+							Mapping: &QemuPciMapping{
+								ID: new(ResourceMappingPciID("aaa"))},
+							Raw: &QemuPciRaw{
+								ID: new(PciID("0000:00:00"))}}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID12: QemuPci{}}},
+					err:     errors.New(QemuPci_Error_MutualExclusive)},
+				{name: `errors.New(QemuPci_Error_RawID)`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID10: QemuPci{
+							Raw: &QemuPciRaw{}}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID10: QemuPci{}}},
+					err:     errors.New(QemuPciRaw_Error_RequiredID)},
+				{name: `errors.New(PciID_Error_MaximumFunction)`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID8: QemuPci{
+							Raw: &QemuPciRaw{ID: new(PciID("0000:00:00.8"))}}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID8: QemuPci{}}},
+					err:     errors.New(PciID_Error_MaximumFunction)}},
+			update: []qemuTestCaseInvalid{
+				{name: `create errors.New(QemuPci_Error_MutualExclusive)`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID12: QemuPci{
+							Mapping: &QemuPciMapping{
+								ID: new(ResourceMappingPciID("aaa"))},
+							Raw: &QemuPciRaw{
+								ID: new(PciID("0000:00:00"))}}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID1: QemuPci{}}},
+					err:     errors.New(QemuPci_Error_MutualExclusive)}}}
+		valid := qemuTestTypeValid{
+			createUpdate: []qemuTestCaseValid{
+				{name: `Delete`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID15: QemuPci{Delete: true}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID0: QemuPci{}}}}}}
+		invalidMapping, validMapping := testData_ConfigQemu_PciDevices_Mapping_Validate()
+		invalidRaw, validRaw := testData_ConfigQemu_PciDevices_Raw_Validate()
+		return invalid.append(invalidMapping).append(invalidRaw), valid.append(validMapping).append(validRaw)
+	})
+}
+
+func testData_ConfigQemu_PciDevices_Mapping_Validate_func() qemuTestTypeValidateFunc {
+	return qemuTestTypeValidateFunc(func() (qemuTestTypeInvalid, qemuTestTypeValid) {
+		return testData_ConfigQemu_PciDevices_Mapping_Validate()
+	})
+}
+
+func testData_ConfigQemu_PciDevices_Mapping_Validate() (qemuTestTypeInvalid, qemuTestTypeValid) {
+	invalid := qemuTestTypeInvalid{
+		createUpdate: []qemuTestCaseInvalid{
+			{name: `errors.New(QemuPci_Error_MappedID)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID11: QemuPci{
+						Mapping: &QemuPciMapping{}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID11: QemuPci{}}},
+				err:     errors.New(QemuPciMapping_Error_RequiredID)},
+			{name: `errors.New(ResourceMappingPciID_Error_Invalid`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID9: QemuPci{
 						Mapping: &QemuPciMapping{
-							ID: util.Pointer(ResourceMappingPciID("aaa"))}}}}},
-		{name: `Valid Raw update`,
-			input: testInput{
-				config: QemuPciDevices{
-					QemuPciID2: QemuPci{
-						Raw: &QemuPciRaw{}}},
-				current: QemuPciDevices{
+							ID: new(ResourceMappingPciID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID9: QemuPci{}}},
+				err:     errors.New(ResourceMappingPciID_Error_Invalid)},
+			{name: `Mapping errors.New(PciMediatedDevice_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID7: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID:   new(ResourceMappingPciID("aaa")),
+							MDev: new(PciMediatedDevice(","))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID7: QemuPci{}}},
+				err:     errors.New(PciMediatedDevice_Error_Invalid)},
+			{name: `Mapping errors.New(PciDeviceID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID7: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID:       new(ResourceMappingPciID("aaa")),
+							DeviceID: new(PciDeviceID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID7: QemuPci{}}},
+				err:     errors.New(PciDeviceID_Error_Invalid)},
+			{name: `Mapping errors.New(PciSubDeviceID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID6: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID:          new(ResourceMappingPciID("aaa")),
+							SubDeviceID: new(PciSubDeviceID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID6: QemuPci{}}},
+				err:     errors.New(PciSubDeviceID_Error_Invalid)},
+			{name: `Mapping errors.New(PciSubVendorID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID5: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID:          new(ResourceMappingPciID("aaa")),
+							SubVendorID: new(PciSubVendorID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID5: QemuPci{}}},
+				err:     errors.New(PciSubVendorID_Error_Invalid)},
+			{name: `Mapping errors.New(PciVendorID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID4: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID:       new(ResourceMappingPciID("aaa")),
+							VendorID: new(PciVendorID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID4: QemuPci{}}},
+				err:     errors.New(PciVendorID_Error_Invalid)}}}
+	valid := qemuTestTypeValid{
+		createUpdate: []qemuTestCaseValid{
+			{name: `Mapping normal`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID15: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID: new(ResourceMappingPciID("test")),
+						}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID0: QemuPci{}}}}},
+		update: []qemuTestCaseValid{
+			{name: `Mapping`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID14: QemuPci{
+						Mapping: &QemuPciMapping{}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID14: QemuPci{
+						Mapping: &QemuPciMapping{
+							ID: new(ResourceMappingPciID("aaa"))}}}}}}}
+	return invalid, valid
+}
+
+func testData_ConfigQemu_PciDevices_Raw_Validate_func() qemuTestTypeValidateFunc {
+	return qemuTestTypeValidateFunc(func() (qemuTestTypeInvalid, qemuTestTypeValid) {
+		return testData_ConfigQemu_PciDevices_Raw_Validate()
+	})
+}
+
+func testData_ConfigQemu_PciDevices_Raw_Validate() (qemuTestTypeInvalid, qemuTestTypeValid) {
+	invalid := qemuTestTypeInvalid{
+		createUpdate: []qemuTestCaseInvalid{
+			{name: `Raw errors.New(PciMediatedDevice_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID3: QemuPci{
+						Raw: &QemuPciRaw{
+							ID:   new(PciID("0000:00:00")),
+							MDev: new(PciMediatedDevice(","))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID3: QemuPci{}}},
+				err:     errors.New(PciMediatedDevice_Error_Invalid)},
+			{name: `Raw errors.New(PciDeviceID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID3: QemuPci{
+						Raw: &QemuPciRaw{
+							ID:       new(PciID("0000:00:00")),
+							DeviceID: new(PciDeviceID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID3: QemuPci{}}},
+				err:     errors.New(PciDeviceID_Error_Invalid)},
+			{name: `Raw errors.New(PciSubDeviceID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
 					QemuPciID2: QemuPci{
 						Raw: &QemuPciRaw{
-							ID: util.Pointer(PciID("0000:00:00"))}}}}},
-		{name: `Invalid update errors.New(QemuPci_Error_MutualExclusive)`,
-			input: testInput{
-				config: QemuPciDevices{
-					QemuPciID3: QemuPci{
-						Mapping: &QemuPciMapping{ID: util.Pointer(ResourceMappingPciID("aaa"))},
-						Raw:     &QemuPciRaw{ID: util.Pointer(PciID("0000:00:00"))}}},
-				current: QemuPciDevices{
-					QemuPciID3: QemuPci{}}},
-			output: errors.New(QemuPci_Error_MutualExclusive)},
-		{name: `Invalid errors.New(QemuPciID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				16: QemuPci{}}},
-			output: errors.New(QemuPciID_Error_Invalid)},
-		{name: `Invalid errors.New(QemuPci_Error_MutualExclusive)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID4: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID: util.Pointer(ResourceMappingPciID("aaa"))},
-					Raw: &QemuPciRaw{
-						ID: util.Pointer(PciID("0000:00:00"))}}}},
-			output: errors.New(QemuPci_Error_MutualExclusive)},
-		{name: `Invalid errors.New(QemuPciMapping_Error_RequiredID)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID5: QemuPci{
-					Mapping: &QemuPciMapping{}}}},
-			output: errors.New(QemuPciMapping_Error_RequiredID)},
-		{name: `Invalid errors.New(QemuPciRaw_Error_RequiredID)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID6: QemuPci{
-					Raw: &QemuPciRaw{}}}},
-			output: errors.New(QemuPciRaw_Error_RequiredID)},
-		{name: `Invalid errors.New(ResourceMappingPciID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID7: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID: util.Pointer(ResourceMappingPciID("a0%^#"))}}}},
-			output: errors.New(ResourceMappingPciID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID8: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID:       util.Pointer(ResourceMappingPciID("aaa")),
-						DeviceID: util.Pointer(PciDeviceID("a0%^#"))}}}},
-			output: errors.New(PciDeviceID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciMediatedDevice_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID8: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID:   util.Pointer(ResourceMappingPciID("aaa")),
-						MDev: util.Pointer(PciMediatedDevice("vendor,-643"))}}}},
-			output: errors.New(PciMediatedDevice_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciSubDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID9: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID:          util.Pointer(ResourceMappingPciID("aaa")),
-						SubDeviceID: util.Pointer(PciSubDeviceID("a0%^#"))}}}},
-			output: errors.New(PciSubDeviceID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciSubVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID10: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID:          util.Pointer(ResourceMappingPciID("aaa")),
-						SubVendorID: util.Pointer(PciSubVendorID("a0%^#"))}}}},
-			output: errors.New(PciSubVendorID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID11: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID:       util.Pointer(ResourceMappingPciID("aaa")),
-						VendorID: util.Pointer(PciVendorID("a0%^#"))}}}},
-			output: errors.New(PciVendorID_Error_Invalid)},
-		{name: `Invalid errors.New(PciID_Error_MaximumFunction)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID12: QemuPci{
-					Raw: &QemuPciRaw{ID: util.Pointer(PciID("0000:00:00.8"))}}}},
-			output: errors.New(PciID_Error_MaximumFunction)},
-		{name: `Invalid Raw errors.New(PciDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID13: QemuPci{
-					Raw: &QemuPciRaw{
-						ID:       util.Pointer(PciID("0000:00:00")),
-						DeviceID: util.Pointer(PciDeviceID("a0%^#"))}}}},
-			output: errors.New(PciDeviceID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciMediatedDevice_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID13: QemuPci{
-					Raw: &QemuPciRaw{
-						ID:   util.Pointer(PciID("0000:00:00")),
-						MDev: util.Pointer(PciMediatedDevice("vendor,-643"))}}}},
-			output: errors.New(PciMediatedDevice_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciSubDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID14: QemuPci{
-					Raw: &QemuPciRaw{
-						ID:          util.Pointer(PciID("0000:00:00")),
-						SubDeviceID: util.Pointer(PciSubDeviceID("a0%^#"))}}}},
-			output: errors.New(PciSubDeviceID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciSubVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID15: QemuPci{
-					Raw: &QemuPciRaw{
-						ID:          util.Pointer(PciID("0000:00:00")),
-						SubVendorID: util.Pointer(PciSubVendorID("a0%^#"))}}}},
-			output: errors.New(PciSubVendorID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPciDevices{
-				QemuPciID0: QemuPci{
-					Raw: &QemuPciRaw{
-						ID:       util.Pointer(PciID("0000:00:00")),
-						VendorID: util.Pointer(PciVendorID("a0%^#"))}}}},
-			output: errors.New(PciVendorID_Error_Invalid)},
+							ID:          new(PciID("0000:00:00")),
+							SubDeviceID: new(PciSubDeviceID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID2: QemuPci{}}},
+				err:     errors.New(PciSubDeviceID_Error_Invalid)},
+			{name: `Raw errors.New(PciSubVendorID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID1: QemuPci{
+						Raw: &QemuPciRaw{
+							ID:          new(PciID("0000:00:00")),
+							SubVendorID: new(PciSubVendorID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID1: QemuPci{}}},
+				err:     errors.New(PciSubVendorID_Error_Invalid)},
+			{name: `Raw errors.New(PciVendorID_Error_Invalid)`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID0: QemuPci{
+						Raw: &QemuPciRaw{
+							ID:       new(PciID("0000:00:00")),
+							VendorID: new(PciVendorID("a0%^#"))}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID0: QemuPci{}}},
+				err:     errors.New(PciVendorID_Error_Invalid)}}}
+	valid := qemuTestTypeValid{
+		createUpdate: []qemuTestCaseValid{
+			{name: `Mapping normal`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID15: QemuPci{
+						Raw: &QemuPciRaw{
+							ID: new(PciID("0000:00:00.1")),
+						}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{QemuPciID0: QemuPci{}}}}},
+		update: []qemuTestCaseValid{
+			{name: `Raw`,
+				input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID13: QemuPci{
+						Raw: &QemuPciRaw{}}}}),
+				current: &ConfigQemu{PciDevices: QemuPciDevices{
+					QemuPciID13: QemuPci{
+						Raw: &QemuPciRaw{
+							ID: new(PciID("0000:00:00"))}}}}}}}
+	return invalid, valid
+}
+
+func testData_ConfigQemu_PciDevices_Validate_ID() qemuTestTypeValidateFunc {
+	return qemuTestTypeValidateFunc(func() (qemuTestTypeInvalid, qemuTestTypeValid) {
+		invalid := qemuTestTypeInvalid{
+			createUpdate: []qemuTestCaseInvalid{
+				{name: `errors.New(QemuPciID_Error_Invalid)`,
+					input: testQemuBaseConfig_Validate(ConfigQemu{PciDevices: QemuPciDevices{
+						20: QemuPci{}}}),
+					current: &ConfigQemu{PciDevices: QemuPciDevices{
+						QemuPciID4: QemuPci{}}},
+					err: errors.New(QemuPciID_Error_Invalid)}}}
+		return invalid, qemuTestTypeValid{}
+	})
+}
+
+func Test_ConfigQemu_PciDevices_Validate(t *testing.T) {
+	t.Parallel()
+	testData_ConfigQemu_PciDevices_Validate().Test(t)
+	testData_ConfigQemu_PciDevices_Validate_ID().Test(t)
+}
+
+func Test_QemuPciDevices_Validate(t *testing.T) {
+	t.Parallel()
+	validate := func(t *testing.T, config ConfigQemu, current *ConfigQemu, version Version, expectedErr error, valid bool) {
+		t.Helper()
+		var currentPciDevices QemuPciDevices
+		if current != nil {
+			currentPciDevices = current.PciDevices
+		}
+		err := config.PciDevices.Validate(currentPciDevices)
+		if valid {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			if expectedErr != nil {
+				require.Equal(t, expectedErr, err)
+			}
+		}
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.output, test.input.config.Validate(test.input.current))
-		})
+	testData_ConfigQemu_PciDevices_Validate().Inject(t, validate)
+	testData_ConfigQemu_PciDevices_Validate_ID().Inject(t, validate)
+}
+
+func Test_QemuPci_Validate(t *testing.T) {
+	t.Parallel()
+	validate := func(t *testing.T, config ConfigQemu, current *ConfigQemu, version Version, expectedErr error, valid bool) {
+		t.Helper()
+		var configQemuPci QemuPci
+		var currentQemuPci *QemuPci
+		for i, e := range config.PciDevices {
+			configQemuPci = e
+			if current != nil && len(current.PciDevices) > 0 {
+				if v, ok := current.PciDevices[i]; ok {
+					currentQemuPci = &v
+				}
+			}
+		}
+		err := configQemuPci.Validate(currentQemuPci)
+		if valid {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			if expectedErr != nil {
+				require.Equal(t, expectedErr, err)
+			}
+		}
 	}
+	testData_ConfigQemu_PciDevices_Validate().Inject(t, validate)
+}
+
+func Test_QemuPciMapping_Validate(t *testing.T) {
+	t.Parallel()
+	validate := func(t *testing.T, config ConfigQemu, current *ConfigQemu, version Version, expectedErr error, valid bool) {
+		t.Helper()
+		var err error
+		for i, e := range config.PciDevices {
+			var currentQemuPciMapping *QemuPciMapping
+			if current != nil && current.PciDevices != nil {
+				if v, ok := current.PciDevices[i]; ok {
+					currentQemuPciMapping = v.Mapping
+				}
+			}
+			err = e.Mapping.Validate(currentQemuPciMapping)
+		}
+		if valid {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			if expectedErr != nil {
+				require.Equal(t, expectedErr, err)
+			}
+		}
+	}
+	testData_ConfigQemu_PciDevices_Mapping_Validate_func().Inject(t, validate)
+}
+
+func Test_QemuPciRaw_Validate(t *testing.T) {
+	t.Parallel()
+	validate := func(t *testing.T, config ConfigQemu, current *ConfigQemu, version Version, expectedErr error, valid bool) {
+		t.Helper()
+		var err error
+		for i, e := range config.PciDevices {
+			var currentQemuPciRaw *QemuPciRaw
+			if current != nil && current.PciDevices != nil {
+				if v, ok := current.PciDevices[i]; ok {
+					currentQemuPciRaw = v.Raw
+				}
+			}
+			err = e.Raw.Validate(currentQemuPciRaw)
+		}
+		if valid {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			if expectedErr != nil {
+				require.Equal(t, expectedErr, err)
+			}
+		}
+	}
+	testData_ConfigQemu_PciDevices_Raw_Validate_func().Inject(t, validate)
 }
 
 func Test_QemuPciID_Validate(t *testing.T) {
@@ -473,114 +641,6 @@ func Test_QemuPciID_Validate(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.output, test.input.Validate())
-		})
-	}
-}
-
-func Test_QemuPci_Validate(t *testing.T) {
-	t.Parallel()
-	type testInput struct {
-		config  QemuPci
-		current QemuPci
-	}
-	tests := []struct {
-		name   string
-		input  testInput
-		output error
-	}{
-		{name: `Valid Delete`,
-			input: testInput{config: QemuPci{
-				Delete: true}}},
-		{name: `Valid Mapping update`,
-			input: testInput{
-				config: QemuPci{
-					Mapping: &QemuPciMapping{}},
-				current: QemuPci{
-					Mapping: &QemuPciMapping{
-						ID: util.Pointer(ResourceMappingPciID("aaa"))}}}},
-		{name: `Valid Raw update`,
-			input: testInput{
-				config: QemuPci{
-					Raw: &QemuPciRaw{}},
-				current: QemuPci{
-					Raw: &QemuPciRaw{
-						ID: util.Pointer(PciID("0000:00:00"))}}}},
-		{name: `Invalid errors.New(QemuPci_Error_MutualExclusive)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID: util.Pointer(ResourceMappingPciID("aaa"))},
-				Raw: &QemuPciRaw{
-					ID: util.Pointer(PciID("0000:00:00"))}}},
-			output: errors.New(QemuPci_Error_MutualExclusive)},
-		{name: `Invalid errors.New(QemuPci_Error_MappedID)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{}}},
-			output: errors.New(QemuPciMapping_Error_RequiredID)},
-		{name: `Invalid errors.New(QemuPci_Error_RawID)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{}}},
-			output: errors.New(QemuPciRaw_Error_RequiredID)},
-		{name: `Invalid errors.New(ResourceMappingPciID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID: util.Pointer(ResourceMappingPciID("a0%^#"))}}},
-			output: errors.New(ResourceMappingPciID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID:       util.Pointer(ResourceMappingPciID("aaa")),
-					DeviceID: util.Pointer(PciDeviceID("a0%^#"))}}},
-			output: errors.New(PciDeviceID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciSubDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID:          util.Pointer(ResourceMappingPciID("aaa")),
-					SubDeviceID: util.Pointer(PciSubDeviceID("a0%^#"))}}},
-			output: errors.New(PciSubDeviceID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciSubVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID:          util.Pointer(ResourceMappingPciID("aaa")),
-					SubVendorID: util.Pointer(PciSubVendorID("a0%^#"))}}},
-			output: errors.New(PciSubVendorID_Error_Invalid)},
-		{name: `Invalid Mapping errors.New(PciVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Mapping: &QemuPciMapping{
-					ID:       util.Pointer(ResourceMappingPciID("aaa")),
-					VendorID: util.Pointer(PciVendorID("a0%^#"))}}},
-			output: errors.New(PciVendorID_Error_Invalid)},
-		{name: `Invalid errors.New(PciID_Error_MaximumFunction)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{ID: util.Pointer(PciID("0000:00:00.8"))}}},
-			output: errors.New(PciID_Error_MaximumFunction)},
-		{name: `Invalid Raw errors.New(PciDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{
-					ID:       util.Pointer(PciID("0000:00:00")),
-					DeviceID: util.Pointer(PciDeviceID("a0%^#"))}}},
-			output: errors.New(PciDeviceID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciSubDeviceID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{
-					ID:          util.Pointer(PciID("0000:00:00")),
-					SubDeviceID: util.Pointer(PciSubDeviceID("a0%^#"))}}},
-			output: errors.New(PciSubDeviceID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciSubVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{
-					ID:          util.Pointer(PciID("0000:00:00")),
-					SubVendorID: util.Pointer(PciSubVendorID("a0%^#"))}}},
-			output: errors.New(PciSubVendorID_Error_Invalid)},
-		{name: `Invalid Raw errors.New(PciVendorID_Error_Invalid)`,
-			input: testInput{config: QemuPci{
-				Raw: &QemuPciRaw{
-					ID:       util.Pointer(PciID("0000:00:00")),
-					VendorID: util.Pointer(PciVendorID("a0%^#"))}}},
-			output: errors.New(PciVendorID_Error_Invalid)},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.output, test.input.config.Validate(test.input.current))
 		})
 	}
 }
