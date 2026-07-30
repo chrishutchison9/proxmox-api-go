@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Telmate/proxmox-api-go/internal/mockServer"
@@ -180,6 +181,37 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 					"disk":    "efidisk0",
 					"storage": "local-lvm"}, []byte(`{"data":"`+UPID("pve", "qmmovedisk", GuestID(100))+`"}`)),
 				mockServer.RequestsGetJson("/nodes/pve/tasks/"+mockServer.Path(UPID("pve", "qmmovedisk", GuestID(100)))+"/status",
+					map[string]any{"data": map[string]any{"exitstatus": string("OK")}}))},
+		{name: `errors.New(ConfigQemu_Error_UnableToUpdateWithoutReboot)`,
+			config: ConfigQemu{EfiDisk: &EfiDisk{Delete: true}},
+			vmr:    VmRef{node: "pve", vmId: 100},
+			requests: mockServer.Append(
+				mockServer.RequestsGetJson("/nodes/pve/qemu/100/config", map[string]any{"data": map[string]any{
+					"efidisk0": "local-dir:100/vm-100-disk-0.qcow2,size=528K,efitype=4m,pre-enrolled-keys=0"}}),
+				mockServer.RequestsGetJson("/cluster/resources?type=vm", map[string]any{"data": []any{
+					map[string]any{"vmid": 100, "node": "pve", "type": "qemu"}}}),
+				mockServer.RequestsGetJson("/cluster/ha/resources/100", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
+				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
+				mockServer.RequestsPut("/nodes/pve/qemu/100/config", map[string]any{"delete": "efidisk0"}),
+				mockServer.RequestsGetJsonData("/nodes/pve/qemu/100/pending", []map[string]any{
+					{"key": string("cores"), "value": float64(2), "pending": float64(3)}})),
+			err: errors.New(ConfigQemu_Error_UnableToUpdateWithoutReboot)},
+		{name: `delete efi disk, running, allowRestart true`,
+			config:       ConfigQemu{EfiDisk: &EfiDisk{Delete: true}},
+			vmr:          VmRef{node: "pve", vmId: 100},
+			allowRestart: true,
+			requests: mockServer.Append(
+				mockServer.RequestsGetJson("/nodes/pve/qemu/100/config", map[string]any{"data": map[string]any{
+					"efidisk0": "local-dir:100/vm-100-disk-0.qcow2,size=528K,efitype=4m,pre-enrolled-keys=0"}}),
+				mockServer.RequestsGetJson("/cluster/resources?type=vm", map[string]any{"data": []any{
+					map[string]any{"vmid": 100, "node": "pve", "type": "qemu"}}}),
+				mockServer.RequestsGetJson("/cluster/ha/resources/100", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
+				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
+				mockServer.RequestsPut("/nodes/pve/qemu/100/config", map[string]any{"delete": "efidisk0"}),
+				mockServer.RequestsGetJsonData("/nodes/pve/qemu/100/pending", []map[string]any{
+					{"key": string("cores"), "value": float64(2), "pending": float64(3)}}),
+				mockServer.RequestsPostResponse("/nodes/pve/qemu/100/status/reboot", nil, []byte(`{"data":"`+UPID("pve", "qmrestart", GuestID(100))+`"}`)),
+				mockServer.RequestsGetJson("/nodes/pve/tasks/"+mockServer.Path(UPID("pve", "qmrestart", GuestID(100)))+"/status",
 					map[string]any{"data": map[string]any{"exitstatus": string("OK")}}))},
 	}
 	server, c := testMockServerInit(t)
