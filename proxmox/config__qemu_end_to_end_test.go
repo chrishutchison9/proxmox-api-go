@@ -2,20 +2,20 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Telmate/proxmox-api-go/internal/mockServer"
-	"github.com/Telmate/proxmox-api-go/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_QemuGuestInterface_Create(t *testing.T) {
 	baseConfig := func(config ConfigQemu) ConfigQemu {
 		if config.CPU == nil {
-			config.CPU = &QemuCPU{Cores: util.Pointer(QemuCpuCores(1))}
+			config.CPU = &QemuCPU{Cores: new(QemuCpuCores(1))}
 		}
 		if config.Memory == nil {
-			config.Memory = &QemuMemory{CapacityMiB: util.Pointer(QemuMemoryCapacity(512))}
+			config.Memory = &QemuMemory{CapacityMiB: new(QemuMemoryCapacity(512))}
 		}
 		return config
 	}
@@ -33,8 +33,8 @@ func Test_QemuGuestInterface_Create(t *testing.T) {
 		{name: `no power state`,
 			vmr: VmRef{node: "pve3", vmId: 100, vmType: GuestQemu},
 			config: baseConfig(ConfigQemu{
-				ID:   util.Pointer(GuestID(100)),
-				Node: util.Pointer(NodeName("pve3"))}),
+				ID:   new(GuestID(100)),
+				Node: new(NodeName("pve3"))}),
 			requests: mockServer.Append(
 				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
 				mockServer.RequestsPostResponse("/nodes/pve3/qemu", map[string]any{
@@ -48,9 +48,9 @@ func Test_QemuGuestInterface_Create(t *testing.T) {
 		{name: `started`,
 			vmr: VmRef{node: "test", vmId: 2345, vmType: GuestQemu},
 			config: baseConfig(ConfigQemu{
-				ID:    util.Pointer(GuestID(2345)),
-				Node:  util.Pointer(NodeName("test")),
-				State: util.Pointer(PowerStateRunning)}),
+				ID:    new(GuestID(2345)),
+				Node:  new(NodeName("test")),
+				State: new(PowerStateRunning)}),
 			requests: mockServer.Append(
 				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
 				mockServer.RequestsPostResponse("/nodes/test/qemu", map[string]any{
@@ -69,9 +69,9 @@ func Test_QemuGuestInterface_Create(t *testing.T) {
 		{name: `stopped`,
 			vmr: VmRef{node: "pve-9l", vmId: 9000, vmType: GuestQemu},
 			config: baseConfig(ConfigQemu{
-				ID:    util.Pointer(GuestID(9000)),
-				Node:  util.Pointer(NodeName("pve-9l")),
-				State: util.Pointer(PowerStateStopped)}),
+				ID:    new(GuestID(9000)),
+				Node:  new(NodeName("pve-9l")),
+				State: new(PowerStateStopped)}),
 			requests: mockServer.Append(
 				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
 				mockServer.RequestsPostResponse("/nodes/pve-9l/qemu", map[string]any{
@@ -111,7 +111,7 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 		err            error
 	}{
 		{name: `stopped to running, allowRestart false`,
-			config: ConfigQemu{State: util.Pointer(PowerStateRunning)},
+			config: ConfigQemu{State: new(PowerStateRunning)},
 			vmr:    VmRef{node: "pve", vmId: 100},
 			requests: mockServer.Append(
 				mockServer.RequestsGetJson("/nodes/pve/qemu/100/config", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
@@ -124,7 +124,7 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 				mockServer.RequestsGetJson("/nodes/pve/tasks/"+mockServer.Path(UPID("pve", "qmstart", GuestID(100)))+"/status",
 					map[string]any{"data": map[string]any{"exitstatus": string("OK")}}))},
 		{name: `running to stopped, allowRestart false`,
-			config: ConfigQemu{State: util.Pointer(PowerStateStopped)},
+			config: ConfigQemu{State: new(PowerStateStopped)},
 			vmr:    VmRef{node: "pve2", vmId: 100},
 			requests: mockServer.Append(
 				mockServer.RequestsGetJson("/nodes/pve2/qemu/100/config", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
@@ -139,7 +139,7 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 		{name: `migrate efi disk, running, allowRestart true`,
 			config: ConfigQemu{
 				EfiDisk: &EfiDisk{
-					Storage: util.Pointer(StorageName("local-lvm"))}},
+					Storage: new(StorageName("local-lvm"))}},
 			vmr:          VmRef{node: "pve", vmId: 100},
 			allowRestart: true,
 			requests: mockServer.Append(
@@ -165,7 +165,7 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 		{name: `migrate efi disk, stopped, allowRestart true`,
 			config: ConfigQemu{
 				EfiDisk: &EfiDisk{
-					Storage: util.Pointer(StorageName("local-lvm"))}},
+					Storage: new(StorageName("local-lvm"))}},
 			vmr:          VmRef{node: "pve", vmId: 100},
 			allowRestart: true,
 			requests: mockServer.Append(
@@ -181,6 +181,37 @@ func Test_QemuGuestInterface_Update(t *testing.T) {
 					"disk":    "efidisk0",
 					"storage": "local-lvm"}, []byte(`{"data":"`+UPID("pve", "qmmovedisk", GuestID(100))+`"}`)),
 				mockServer.RequestsGetJson("/nodes/pve/tasks/"+mockServer.Path(UPID("pve", "qmmovedisk", GuestID(100)))+"/status",
+					map[string]any{"data": map[string]any{"exitstatus": string("OK")}}))},
+		{name: `errors.New(ConfigQemu_Error_UnableToUpdateWithoutReboot)`,
+			config: ConfigQemu{EfiDisk: &EfiDisk{Delete: true}},
+			vmr:    VmRef{node: "pve", vmId: 100},
+			requests: mockServer.Append(
+				mockServer.RequestsGetJson("/nodes/pve/qemu/100/config", map[string]any{"data": map[string]any{
+					"efidisk0": "local-dir:100/vm-100-disk-0.qcow2,size=528K,efitype=4m,pre-enrolled-keys=0"}}),
+				mockServer.RequestsGetJson("/cluster/resources?type=vm", map[string]any{"data": []any{
+					map[string]any{"vmid": 100, "node": "pve", "type": "qemu"}}}),
+				mockServer.RequestsGetJson("/cluster/ha/resources/100", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
+				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
+				mockServer.RequestsPut("/nodes/pve/qemu/100/config", map[string]any{"delete": "efidisk0"}),
+				mockServer.RequestsGetJsonData("/nodes/pve/qemu/100/pending", []map[string]any{
+					{"key": string("cores"), "value": float64(2), "pending": float64(3)}})),
+			err: errors.New(ConfigQemu_Error_UnableToUpdateWithoutReboot)},
+		{name: `delete efi disk, running, allowRestart true`,
+			config:       ConfigQemu{EfiDisk: &EfiDisk{Delete: true}},
+			vmr:          VmRef{node: "pve", vmId: 100},
+			allowRestart: true,
+			requests: mockServer.Append(
+				mockServer.RequestsGetJson("/nodes/pve/qemu/100/config", map[string]any{"data": map[string]any{
+					"efidisk0": "local-dir:100/vm-100-disk-0.qcow2,size=528K,efitype=4m,pre-enrolled-keys=0"}}),
+				mockServer.RequestsGetJson("/cluster/resources?type=vm", map[string]any{"data": []any{
+					map[string]any{"vmid": 100, "node": "pve", "type": "qemu"}}}),
+				mockServer.RequestsGetJson("/cluster/ha/resources/100", map[string]any{"data": map[string]any{}}), // TODO we don't need this info here
+				mockServer.RequestsGetJson("/version", map[string]any{"data": map[string]any{"version": "8.0.1"}}),
+				mockServer.RequestsPut("/nodes/pve/qemu/100/config", map[string]any{"delete": "efidisk0"}),
+				mockServer.RequestsGetJsonData("/nodes/pve/qemu/100/pending", []map[string]any{
+					{"key": string("cores"), "value": float64(2), "pending": float64(3)}}),
+				mockServer.RequestsPostResponse("/nodes/pve/qemu/100/status/reboot", nil, []byte(`{"data":"`+UPID("pve", "qmrestart", GuestID(100))+`"}`)),
+				mockServer.RequestsGetJson("/nodes/pve/tasks/"+mockServer.Path(UPID("pve", "qmrestart", GuestID(100)))+"/status",
 					map[string]any{"data": map[string]any{"exitstatus": string("OK")}}))},
 	}
 	server, c := testMockServerInit(t)

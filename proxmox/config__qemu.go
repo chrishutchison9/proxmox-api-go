@@ -727,8 +727,6 @@ func (config ConfigQemu) updateNoCheck(
 		}
 	}
 
-	var pending bool
-
 	if config.EfiDisk != nil {
 		updateConfig.efiDisk = updateConfig.raw.GetEfiDisk()
 		if updateConfig.efiDisk != nil {
@@ -746,6 +744,8 @@ func (config ConfigQemu) updateNoCheck(
 			}
 		}
 	}
+
+	var pending bool
 
 	if deleteBuilder.Len() > 0 {
 		pending = true
