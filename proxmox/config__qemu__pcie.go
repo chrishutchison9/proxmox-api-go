@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Telmate/proxmox-api-go/internal/body"
 	"github.com/Telmate/proxmox-api-go/internal/util"
 )
 
@@ -12,24 +13,37 @@ type QemuPciDevices map[QemuPciID]QemuPci
 
 const QemuPciDevicesAmount = uint8(QemuPciIDMaximum) + 1
 
-func (config QemuPciDevices) mapToAPI(current QemuPciDevices, params map[string]interface{}) string {
-	var builder strings.Builder
+func (config QemuPciDevices) mapToApiCreate(b *strings.Builder) {
+	for i, e := range config {
+		if e.Delete {
+			continue
+		}
+		b.WriteString("&" + qemuPrefixApiKeyPCI)
+		b.WriteString(i.String())
+		b.WriteRune('=')
+		b.WriteString(e.mapToApiIntermediary(qemuPci{}).String())
+	}
+}
+
+func (config QemuPciDevices) mapToApiUpdate(current QemuPciDevices, b, delete *strings.Builder) {
 	for i, e := range config {
 		if v, isSet := current[i]; isSet {
 			if e.Delete {
-				builder.WriteString("," + qemuPrefixApiKeyPCI)
-				builder.WriteString(i.String())
+				delete.WriteString("," + qemuPrefixApiKeyPCI)
+				delete.WriteString(i.String())
 				continue
 			}
-			params[qemuPrefixApiKeyPCI+i.String()] = e.mapToAPI(&v)
+			e.mapToAPI(&v, i, b)
 		} else {
 			if e.Delete {
 				continue
 			}
-			params[qemuPrefixApiKeyPCI+i.String()] = e.mapToAPI(nil)
+			b.WriteString("&" + qemuPrefixApiKeyPCI)
+			b.WriteString(i.String())
+			b.WriteRune('=')
+			b.WriteString(e.mapToApiIntermediary(qemuPci{}).String())
 		}
 	}
-	return builder.String()
 }
 
 func (raw *rawConfigQemu) GetPciDevices() QemuPciDevices {
@@ -45,7 +59,29 @@ func (raw *rawConfigQemu) GetPciDevices() QemuPciDevices {
 	return nil
 }
 
-func (config QemuPciDevices) Validate(current QemuPciDevices) (err error) {
+func (config QemuPciDevices) Validate(current QemuPciDevices) error {
+	if len(current) > 0 {
+		return config.validateUpdate(current)
+	}
+	return config.validateCreate()
+}
+
+func (config QemuPciDevices) validateCreate() (err error) {
+	for i, e := range config {
+		if err = i.Validate(); err != nil {
+			return
+		}
+		if e.Delete {
+			continue
+		}
+		if err = e.validateCreate(); err != nil {
+			return
+		}
+	}
+	return
+}
+
+func (config QemuPciDevices) validateUpdate(current QemuPciDevices) (err error) {
 	for i, e := range config {
 		if err = i.Validate(); err != nil {
 			return
@@ -55,19 +91,27 @@ func (config QemuPciDevices) Validate(current QemuPciDevices) (err error) {
 		}
 		if current != nil {
 			if v, isSet := (current)[i]; isSet {
-				if err = e.Validate(v); err != nil {
+				if err = e.validateUpdate(v); err != nil {
 					return
 				}
-			}
-		} else {
-			if err = e.Validate(QemuPci{}); err != nil {
-				return
+			} else {
+				if err = e.validateCreate(); err != nil {
+					return
+				}
 			}
 		}
 	}
 	return nil
 }
 
+// QemuPciID
+//
+//	const (
+//		QemuPciID0
+//		...
+//		QemuPciID15
+//
+// )
 type QemuPciID uint8
 
 const (
@@ -103,19 +147,23 @@ func (id QemuPciID) Validate() error {
 }
 
 type QemuPci struct {
-	Delete  bool            `json:"delete,omitempty"`
 	Mapping *QemuPciMapping `json:"mapping,omitempty"`
 	Raw     *QemuPciRaw     `json:"raw,omitempty"`
+	Delete  bool            `json:"delete,omitempty"`
 }
 
 const QemuPci_Error_MutualExclusive string = "mapping and raw are mutually exclusive"
 
-func (config QemuPci) mapToAPI(current *QemuPci) string {
-	var usedConfig qemuPci
-	if current != nil {
-		usedConfig = current.mapToApiIntermediary(qemuPci{})
+func (config QemuPci) mapToAPI(current *QemuPci, id QemuPciID, b *strings.Builder) {
+	usedConfig := current.mapToApiIntermediary(qemuPci{})
+	currentStr := usedConfig.String()
+	newStr := config.mapToApiIntermediary(usedConfig).String()
+	if currentStr != newStr {
+		b.WriteString("&" + qemuPrefixApiKeyPCI)
+		b.WriteString(id.String())
+		b.WriteRune('=')
+		b.WriteString(newStr)
 	}
-	return config.mapToApiIntermediary(usedConfig).String()
 }
 
 func (QemuPci) mapToSDK(raw string) QemuPci {
@@ -253,19 +301,45 @@ func (config QemuPci) mapToApiIntermediary(usedConfig qemuPci) qemuPci {
 	return usedConfig
 }
 
-func (config QemuPci) Validate(current QemuPci) error {
+func (config QemuPci) Validate(current *QemuPci) error {
 	if config.Delete {
 		return nil
 	}
+	if current != nil {
+		return config.validateUpdate(*current)
+	}
+	return config.validateCreate()
+}
+
+func (config QemuPci) validateCreate() error {
 	var mutualExclusivity bool
 	if config.Mapping != nil {
-		if err := config.Mapping.Validate(current.Mapping); err != nil {
+		if err := config.Mapping.validateCreate(); err != nil {
 			return err
 		}
 		mutualExclusivity = true
 	}
 	if config.Raw != nil {
-		if err := config.Raw.Validate(current.Raw); err != nil {
+		if err := config.Raw.validateCreate(); err != nil {
+			return err
+		}
+		if mutualExclusivity {
+			return errors.New(QemuPci_Error_MutualExclusive)
+		}
+	}
+	return nil
+}
+
+func (config QemuPci) validateUpdate(current QemuPci) error {
+	var mutualExclusivity bool
+	if config.Mapping != nil {
+		if err := config.Mapping.validateUpdate(current.Mapping); err != nil {
+			return err
+		}
+		mutualExclusivity = true
+	}
+	if config.Raw != nil {
+		if err := config.Raw.validateUpdate(current.Raw); err != nil {
 			return err
 		}
 		if mutualExclusivity {
@@ -278,17 +352,17 @@ func (config QemuPci) Validate(current QemuPci) error {
 // TODO add [,legacy-igd=<1|0>]
 // TODO add [,romfile=<string>]
 type qemuPci struct {
+	deviceID    PciDeviceID // [,device-id=<hex id>]
 	enum        qemuPciEnum
 	mappingID   ResourceMappingPciID // [,mapping=<mapping-id>]
+	mDev        PciMediatedDevice    // [,mdev=<string>]
 	rawID       PciID                // [[host=]<HOSTPCIID[;HOSTPCIID2...]>]
+	subDeviceID PciSubDeviceID       // [,sub-device-id=<hex id>]
+	subVendorID PciSubVendorID       // [,sub-vendor-id=<hex id>]
+	vendorID    PciVendorID          // [,vendor-id=<hex id>]
 	pCIe        bool                 // [,pcie=<1|0>] // only in key when true
 	primaryGPU  bool                 // [,x-vga=<1|0>] // only in key when true
 	romBar      bool                 // [,rombar=<1|0>] // only in key when false
-	vendorID    PciVendorID          // [,vendor-id=<hex id>]
-	deviceID    PciDeviceID          // [,device-id=<hex id>]
-	subVendorID PciSubVendorID       // [,sub-vendor-id=<hex id>]
-	subDeviceID PciSubDeviceID       // [,sub-device-id=<hex id>]
-	mDev        PciMediatedDevice    // [,mdev=<string>]
 }
 
 const (
@@ -301,43 +375,43 @@ const (
 
 func (config qemuPci) String() string { // String is for fmt.Stringer.
 	var builder strings.Builder
+	switch config.enum {
+	case qemuPCciEnumMapping:
+		builder.WriteString("mapping" + equal)
+		builder.WriteString(config.mappingID.String())
+	case qemuPciEnumRaw:
+		builder.WriteString(body.Escape(config.rawID.String()))
+	}
 	if config.pCIe {
-		builder.WriteString(",pcie=1")
+		builder.WriteString(comma + "pcie" + equal + "1")
 	}
 	if config.primaryGPU {
-		builder.WriteString(",x-vga=1")
+		builder.WriteString(comma + "x-vga" + equal + "1")
 	}
 	if !config.romBar {
-		builder.WriteString(",rombar=0")
+		builder.WriteString(comma + "rombar" + equal + "0")
 	}
 	if config.vendorID != "" {
-		builder.WriteString(",vendor-id=")
+		builder.WriteString(comma + "vendor-id" + equal)
 		builder.WriteString(config.vendorID.String())
 	}
 	if config.deviceID != "" {
-		builder.WriteString(",device-id=")
+		builder.WriteString(comma + "device-id" + equal)
 		builder.WriteString(config.deviceID.String())
 	}
 	if config.subVendorID != "" {
-		builder.WriteString(",sub-vendor-id=")
+		builder.WriteString(comma + "sub-vendor-id" + equal)
 		builder.WriteString(config.subVendorID.String())
 	}
 	if config.subDeviceID != "" {
-		builder.WriteString(",sub-device-id=")
+		builder.WriteString(comma + "sub-device-id" + equal)
 		builder.WriteString(config.subDeviceID.String())
 	}
 	if config.mDev != "" {
-		builder.WriteString(",mdev=")
+		builder.WriteString(comma + "mdev" + equal)
 		builder.WriteString(config.mDev.String())
 	}
-	var settings string
-	switch config.enum {
-	case qemuPCciEnumMapping:
-		settings = "mapping=" + string(config.mappingID)
-	case qemuPciEnumRaw:
-		settings = config.rawID.String()
-	}
-	return settings + builder.String()
+	return builder.String()
 }
 
 type qemuPciEnum bool
@@ -357,6 +431,51 @@ type QemuPciMapping struct {
 const QemuPciMapping_Error_RequiredID string = "mapped id is required during creation"
 
 func (config QemuPciMapping) Validate(current *QemuPciMapping) error {
+	if current != nil {
+		return config.validateUpdate(current)
+	}
+	return config.validateCreate()
+}
+
+func (config QemuPciMapping) validate() (err error) {
+	if config.MDev != nil {
+		if err = config.MDev.Validate(); err != nil {
+			return
+		}
+	}
+	if config.DeviceID != nil {
+		if err = config.DeviceID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.SubDeviceID != nil {
+		if err = config.SubDeviceID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.SubVendorID != nil {
+		if err = config.SubVendorID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.VendorID != nil {
+		err = config.VendorID.Validate()
+	}
+	return
+}
+
+func (config QemuPciMapping) validateCreate() error {
+	if config.ID == nil {
+		return errors.New(QemuPciMapping_Error_RequiredID)
+	} else {
+		if err := config.ID.Validate(); err != nil {
+			return err
+		}
+	}
+	return config.validate()
+}
+
+func (config QemuPciMapping) validateUpdate(current *QemuPciMapping) error {
 	if config.ID != nil {
 		if err := config.ID.Validate(); err != nil {
 			return err
@@ -364,32 +483,7 @@ func (config QemuPciMapping) Validate(current *QemuPciMapping) error {
 	} else if current == nil || current.ID == nil {
 		return errors.New(QemuPciMapping_Error_RequiredID)
 	}
-	if config.MDev != nil {
-		if err := config.MDev.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.DeviceID != nil {
-		if err := config.DeviceID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.SubDeviceID != nil {
-		if err := config.SubDeviceID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.SubVendorID != nil {
-		if err := config.SubVendorID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.VendorID != nil {
-		if err := config.VendorID.Validate(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return config.validate()
 }
 
 type QemuPciRaw struct {
@@ -407,6 +501,51 @@ type QemuPciRaw struct {
 const QemuPciRaw_Error_RequiredID string = "raw id is required during creation"
 
 func (config QemuPciRaw) Validate(current *QemuPciRaw) error {
+	if current != nil {
+		return config.validateUpdate(current)
+	}
+	return config.validateCreate()
+}
+
+func (config QemuPciRaw) validate() (err error) {
+	if config.MDev != nil {
+		if err = config.MDev.Validate(); err != nil {
+			return
+		}
+	}
+	if config.DeviceID != nil {
+		if err = config.DeviceID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.SubDeviceID != nil {
+		if err = config.SubDeviceID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.SubVendorID != nil {
+		if err = config.SubVendorID.Validate(); err != nil {
+			return
+		}
+	}
+	if config.VendorID != nil {
+		err = config.VendorID.Validate()
+	}
+	return
+}
+
+func (config QemuPciRaw) validateCreate() error {
+	if config.ID == nil {
+		return errors.New(QemuPciRaw_Error_RequiredID)
+	} else {
+		if err := config.ID.Validate(); err != nil {
+			return err
+		}
+	}
+	return config.validate()
+}
+
+func (config QemuPciRaw) validateUpdate(current *QemuPciRaw) error {
 	if config.ID != nil {
 		if err := config.ID.Validate(); err != nil {
 			return err
@@ -414,32 +553,7 @@ func (config QemuPciRaw) Validate(current *QemuPciRaw) error {
 	} else if current == nil || current.ID == nil {
 		return errors.New(QemuPciRaw_Error_RequiredID)
 	}
-	if config.MDev != nil {
-		if err := config.MDev.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.DeviceID != nil {
-		if err := config.DeviceID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.SubDeviceID != nil {
-		if err := config.SubDeviceID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.SubVendorID != nil {
-		if err := config.SubVendorID.Validate(); err != nil {
-			return err
-		}
-	}
-	if config.VendorID != nil {
-		if err := config.VendorID.Validate(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return config.validate()
 }
 
 // Hexadecimal, range 0x0000-0xFFFF, prefixed is optional

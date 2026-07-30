@@ -401,10 +401,6 @@ func (config *ConfigQemu) mapToAPI(currentConfig ConfigQemu, version Version) (p
 		params["vga"] = strings.Join(vgaParam, ",")
 	}
 
-	if config.PciDevices != nil {
-		itemsToDelete += config.PciDevices.mapToAPI(currentConfig.PciDevices, params)
-	}
-
 	if itemsToDelete != "" {
 		params["delete"] = strings.TrimPrefix(itemsToDelete, ",")
 	}
@@ -414,12 +410,13 @@ func (config *ConfigQemu) mapToAPI(currentConfig ConfigQemu, version Version) (p
 func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byte) {
 	params := config.mapToAPI(ConfigQemu{}, version)
 	builder := strings.Builder{}
+	bPtr := &builder
 	if config.Architecture != nil {
 		builder.WriteString("&" + qemuApiKeyArchitecture + "=")
 		builder.WriteString(config.Architecture.String())
 	}
 	if config.CPU != nil {
-		config.CPU.mapToApiCreate(version, &builder)
+		config.CPU.mapToApiCreate(version, bPtr)
 	}
 	if config.Description != nil && *config.Description != "" {
 		builder.WriteString("&" + qemuApiKeyDescription + "=")
@@ -429,7 +426,10 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 		config.Disks.mapToApiCreate(params)
 	}
 	if config.EfiDisk != nil {
-		config.EfiDisk.mapToApiCreate(&builder)
+		config.EfiDisk.mapToApiCreate(bPtr)
+	}
+	if config.PciDevices != nil {
+		config.PciDevices.mapToApiCreate(bPtr)
 	}
 	if config.State != nil && *config.State == PowerStateRunning {
 		builder.WriteString("&start=1")
@@ -441,10 +441,10 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 		}
 	}
 	if config.USBs != nil {
-		config.USBs.mapToApiCreate(&builder)
+		config.USBs.mapToApiCreate(bPtr)
 	}
 	if config.Watchdog != nil && !config.Watchdog.Delete {
-		config.Watchdog.mapToApiCreate(&builder)
+		config.Watchdog.mapToApiCreate(bPtr)
 	}
 	if len(params) == 0 {
 		params = nil
@@ -458,9 +458,11 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current configQemuUpdate, version Version) (map[string]any, *[]byte) {
 	params := config.mapToAPI(*currentLegacy, version)
 	builder := strings.Builder{}
+	bPtr := &builder
 	delete := strings.Builder{}
+	deletePtr := &delete
 	if config.CPU != nil {
-		config.CPU.mapToApiUpdate(*currentLegacy.CPU, version, &builder, &delete)
+		config.CPU.mapToApiUpdate(*currentLegacy.CPU, version, bPtr, deletePtr)
 	}
 	if config.Description != nil {
 		if *config.Description != current.raw.GetDescription() {
@@ -470,16 +472,23 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 	}
 	if config.Disks != nil {
 		if current.disks != nil { // Update
-			config.Disks.mapToApiUpdate(*current.disks, params, &delete)
+			config.Disks.mapToApiUpdate(*current.disks, params, deletePtr)
 		} else { // Create
 			config.Disks.mapToApiCreate(params)
 		}
 	}
 	if config.EfiDisk != nil {
 		if current.efiDisk != nil {
-			config.EfiDisk.mapToApiUpdate(current.efiDisk, &builder, &delete)
+			config.EfiDisk.mapToApiUpdate(current.efiDisk, bPtr, deletePtr)
 		} else {
-			config.EfiDisk.mapToApiCreate(&builder)
+			config.EfiDisk.mapToApiCreate(bPtr)
+		}
+	}
+	if config.PciDevices != nil {
+		if currentLegacy.PciDevices != nil {
+			config.PciDevices.mapToApiUpdate(currentLegacy.PciDevices, bPtr, deletePtr)
+		} else {
+			config.PciDevices.mapToApiCreate(bPtr)
 		}
 	}
 	if config.Tags != nil {
@@ -497,16 +506,16 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 	}
 	if config.USBs != nil {
 		if currentLegacy.USBs != nil {
-			config.USBs.mapToApiUpdate(currentLegacy.USBs, &builder, &delete)
+			config.USBs.mapToApiUpdate(currentLegacy.USBs, bPtr, deletePtr)
 		} else if len(config.USBs) > 0 {
-			config.USBs.mapToApiCreate(&builder)
+			config.USBs.mapToApiCreate(bPtr)
 		}
 	}
 	if config.Watchdog != nil {
 		if currentLegacy.Watchdog != nil {
-			config.Watchdog.mapToApiUpdate(currentLegacy.Watchdog, &builder, &delete)
+			config.Watchdog.mapToApiUpdate(currentLegacy.Watchdog, bPtr, deletePtr)
 		} else if !config.Watchdog.Delete {
-			config.Watchdog.mapToApiCreate(&builder)
+			config.Watchdog.mapToApiCreate(bPtr)
 		}
 	}
 
@@ -914,11 +923,6 @@ func (config ConfigQemu) Validate(current *ConfigQemu, version Version) (err err
 				return
 			}
 		}
-		if config.PciDevices != nil {
-			if err = config.PciDevices.Validate(nil); err != nil {
-				return
-			}
-		}
 		if config.RandomnessDevice != nil {
 			if err = config.RandomnessDevice.validateCreate(); err != nil {
 				return
@@ -945,11 +949,6 @@ func (config ConfigQemu) Validate(current *ConfigQemu, version Version) (err err
 		}
 		if config.Networks != nil {
 			if err = config.Networks.Validate(current.Networks); err != nil {
-				return
-			}
-		}
-		if config.PciDevices != nil {
-			if err = config.PciDevices.Validate(current.PciDevices); err != nil {
 				return
 			}
 		}
@@ -1020,6 +1019,11 @@ func (config ConfigQemu) validateCreate(version Version) error {
 			return err
 		}
 	}
+	if config.PciDevices != nil {
+		if err := config.PciDevices.validateCreate(); err != nil {
+			return err
+		}
+	}
 	if config.USBs != nil {
 		if err := config.USBs.validateCreate(); err != nil {
 			return err
@@ -1033,46 +1037,53 @@ func (config ConfigQemu) validateCreate(version Version) error {
 	return nil
 }
 
-func (config ConfigQemu) validateUpdate(current *ConfigQemu, version Version) error {
+func (config ConfigQemu) validateUpdate(current *ConfigQemu, version Version) (err error) {
 	if config.CPU != nil {
-		if err := config.CPU.validateUpdate(current.CPU, version); err != nil {
-			return err
+		if err = config.CPU.validateUpdate(current.CPU, version); err != nil {
+			return
 		}
 	}
 	if config.EfiDisk != nil {
 		if current.EfiDisk != nil { // update
-			if err := config.EfiDisk.validateUpdate(); err != nil {
-				return err
-			}
+			err = config.EfiDisk.validateUpdate()
 		} else { // create
-			if err := config.EfiDisk.validateCreate(); err != nil {
-				return err
-			}
+			err = config.EfiDisk.validateCreate()
+		}
+		if err != nil {
+			return
+		}
+	}
+	if config.PciDevices != nil {
+		if len(current.PciDevices) > 0 { // update
+			err = config.PciDevices.validateUpdate(current.PciDevices)
+		} else {
+			err = config.PciDevices.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
 	if config.USBs != nil {
 		if len(current.USBs) > 0 { // update
-			if err := config.USBs.validateUpdate(current.USBs); err != nil {
-				return err
-			}
+			err = config.USBs.validateUpdate(current.USBs)
 		} else {
-			if err := config.USBs.validateCreate(); err != nil {
-				return err
-			}
+			err = config.USBs.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
 	if config.Watchdog != nil {
 		if current.Watchdog != nil { // update
-			if err := config.Watchdog.validateUpdate(); err != nil {
-				return err
-			}
+			err = config.Watchdog.validateUpdate()
 		} else { // create
-			if err := config.Watchdog.validateCreate(); err != nil {
-				return err
-			}
+			err = config.Watchdog.validateCreate()
+		}
+		if err != nil {
+			return
 		}
 	}
-	return nil
+	return
 }
 
 /*
