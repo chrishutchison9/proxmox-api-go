@@ -121,7 +121,7 @@ func Test_Snapshot_ReadLxc(t *testing.T) {
 				raw, err := c.Snapshot.ReadLxc(ctx, *pveSDK.NewVmRef(guest), snapshot.Name)
 				require.NoError(t, err)
 				require.NotNil(t, raw)
-				config := raw.Get(pveSDK.VmRef{}, pveSDK.PowerStateRunning)
+				config := raw.Get(nil, pveSDK.PowerStateRunning)
 				config.State = nil
 				expected.Description = &snapshot.Description
 				require.EqualExportedValues(t, &expected, config)

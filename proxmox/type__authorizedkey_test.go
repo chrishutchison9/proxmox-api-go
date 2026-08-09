@@ -256,8 +256,7 @@ func Test_sshKeyUrlEncode(t *testing.T) {
 func Benchmark_sshKeyUrlDecode(b *testing.B) {
 	input := test_data_guest.AuthorizedKey_Encoded_Input()
 
-	b.ResetTimer() // Reset timer to exclude setup time
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = sshKeyUrlDecode(input)
 	}
 }
@@ -269,8 +268,7 @@ func Benchmark_sshKeyUrlEncode(b *testing.B) {
 		input[i] = AuthorizedKey{PublicKey: rawInput[i].PublicKey, Comment: rawInput[i].Comment}
 	}
 
-	b.ResetTimer() // Reset timer to exclude setup time
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = sshKeyUrlEncode(input)
 	}
 }

@@ -398,6 +398,7 @@ func Test_snapshotClient_ReadLxc(t *testing.T) {
 	tests := []struct {
 		name     string
 		guest    VmRef
+		pool     *PoolName
 		snapName SnapshotName
 		config   *ConfigLXC
 		requests []mockServer.Request
@@ -457,7 +458,7 @@ func Test_snapshotClient_ReadLxc(t *testing.T) {
 			raw, err := c.New().Snapshot.ReadLxc(context.Background(), test.guest, test.snapName)
 			require.Equal(t, test.err, err)
 			if err == nil {
-				require.Equal(t, test.config, raw.Get(test.guest, PowerStateRunning))
+				require.Equal(t, test.config, raw.Get(test.pool, PowerStateRunning))
 			}
 			server.Clear(t)
 		})
@@ -1460,9 +1461,8 @@ func Test_RawSnapshotTree_Current_and_Root(t *testing.T) {
 
 func Benchmark_RawSnapshotTree_Current_and_Root(b *testing.B) {
 	tests := test_RawSnapshotTree_Current_and_Root_data()
-	b.ResetTimer()
 	var result RawSnapshotTree
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, test := range tests {
 			result = RawSnapshots(&test.input).Tree()
 		}

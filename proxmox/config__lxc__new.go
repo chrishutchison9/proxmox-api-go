@@ -8,9 +8,38 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Telmate/proxmox-api-go/internal/util"
 )
+
+type (
+	LxcGuestInterface interface {
+		// Read returns the configuration of the LXC guest.
+		// Including pending changes.
+		Read(context.Context, VmRef) (RawConfigLXC, error)
+		ReadNoCheck(context.Context, VmRef) (RawConfigLXC, error)
+	}
+
+	lxcGuestClient struct {
+		api       *clientAPI
+		oldClient *Client
+	}
+)
+
+var _ LxcGuestInterface = (*lxcGuestClient)(nil)
+
+func (c *lxcGuestClient) Read(ctx context.Context, vmr VmRef) (RawConfigLXC, error) {
+	if _, err := vmr.check_unsafe(ctx, c.api); err != nil {
+		return nil, err
+	}
+	return c.ReadNoCheck(ctx, vmr)
+}
+
+func (c *lxcGuestClient) ReadNoCheck(ctx context.Context, vmr VmRef) (RawConfigLXC, error) {
+	version, err := c.oldClient.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api, version)
+}
 
 type LxcCpuArchitecture string
 
@@ -55,7 +84,11 @@ const (
 )
 
 func (config ConfigLXC) Create(ctx context.Context, c *Client) (*VmRef, error) {
-	if err := config.Validate(nil); err != nil {
+	version, err := c.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = config.Validate(nil, version); err != nil {
 		return nil, err
 	}
 	return config.CreateNoCheck(ctx, c)
@@ -100,6 +133,7 @@ func (config ConfigLXC) CreateNoCheck(ctx context.Context, c *Client) (*VmRef, e
 
 func (config ConfigLXC) mapToApiCreate() (map[string]any, *[]byte, PoolName) {
 	builder := strings.Builder{}
+	builderPtr := &builder
 	params := config.mapToApiShared()
 	var privileged bool
 	builder.WriteString("&" + lxcApiKeyUnprivileged + "=")
@@ -141,7 +175,7 @@ func (config ConfigLXC) mapToApiCreate() (map[string]any, *[]byte, PoolName) {
 		config.Mounts.mapToAPICreate(privileged, params)
 	}
 	if config.Networks != nil {
-		config.Networks.mapToApiCreate(params)
+		config.Networks.mapToApiCreate(builderPtr)
 	}
 	if config.Pool != nil {
 		pool = *config.Pool
@@ -181,7 +215,9 @@ func (config ConfigLXC) mapToApiShared() map[string]any {
 }
 
 func (config ConfigLXC) mapToApiUpdate(current ConfigLXC) (map[string]any, *[]byte) {
-	builder := strings.Builder{}
+	var builder, deleteBuidler strings.Builder
+	builderPtr := &builder
+	deleteBuidlerPtr := &deleteBuidler
 	privileged := lxcDefaultPrivilege
 	if current.Privileged != nil {
 		privileged = *current.Privileged
@@ -234,9 +270,9 @@ func (config ConfigLXC) mapToApiUpdate(current ConfigLXC) (map[string]any, *[]by
 	}
 	if len(config.Networks) > 0 {
 		if len(current.Networks) > 0 {
-			delete += config.Networks.mapToApiUpdate(current.Networks, params)
+			config.Networks.mapToApiUpdate(current.Networks, builderPtr, deleteBuidlerPtr)
 		} else {
-			config.Networks.mapToApiCreate(params)
+			config.Networks.mapToApiCreate(builderPtr)
 		}
 	}
 	if config.Protection != nil && (current.Protection == nil || *config.Protection != *current.Protection) {
@@ -279,6 +315,14 @@ func (config ConfigLXC) mapToApiUpdate(current ConfigLXC) (map[string]any, *[]by
 	if delete != "" {
 		params[lxcApiKeyDelete] = strings.TrimPrefix(delete, ",")
 	}
+	if deleteBuidler.Len() > 0 {
+		if v, ok := params["delete"]; ok {
+			params["delete"] = v.(string) + deleteBuidler.String()
+		} else {
+			builder.WriteString("&delete=")
+			builder.WriteString(deleteBuidler.String()[1:]) // remove leading '&'
+		}
+	}
 	if len(params) > 0 {
 		params[lxcApiKeyDigest] = current.rawDigest.String()
 	}
@@ -303,20 +347,19 @@ func (config ConfigLXC) Update(ctx context.Context, allowRestart bool, vmr *VmRe
 	if err != nil {
 		return err
 	}
-
-	raw, err := guestGetLxcRawConfig_Unsafe(ctx, vmr, c.new().apiGet())
-	if err != nil {
-		return err
-	}
-	current := raw.get(*vmr)
-	if err := config.Validate(current); err != nil {
-		return err
-	}
 	version, err := c.Version(ctx)
 	if err != nil {
 		return err
 	}
-	return config.update_Unsafe(ctx, allowRestart, vmr, current, rawStatus.GetState(), version.Encode(), c)
+	raw, err := LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api(), version)
+	if err != nil {
+		return err
+	}
+	current := raw.get(vmr.pool)
+	if err := config.Validate(current, version); err != nil {
+		return err
+	}
+	return config.update_Unsafe(ctx, allowRestart, vmr, current, rawStatus.GetState(), version, c)
 }
 
 func (config ConfigLXC) UpdateNoCheck(ctx context.Context, allowRestart bool, vmr *VmRef, c *Client) error {
@@ -330,15 +373,16 @@ func (config ConfigLXC) UpdateNoCheck(ctx context.Context, allowRestart bool, vm
 	if err != nil {
 		return err
 	}
-	raw, err := c.new().guestGetLxcRawConfig(ctx, vmr)
+	var version Version
+	if version, err = c.Version(ctx); err != nil {
+		return err
+	}
+	var raw *rawConfigLXC
+	raw, err = LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api(), version)
 	if err != nil {
 		return err
 	}
-	version, err := c.Version(ctx)
-	if err != nil {
-		return err
-	}
-	return config.update_Unsafe(ctx, allowRestart, vmr, raw.get(*vmr), rawStatus.GetState(), version.Encode(), c)
+	return config.update_Unsafe(ctx, allowRestart, vmr, raw.get(vmr.pool), rawStatus.GetState(), version, c)
 }
 
 func (config ConfigLXC) update_Unsafe(
@@ -347,7 +391,7 @@ func (config ConfigLXC) update_Unsafe(
 	vmr *VmRef,
 	current *ConfigLXC,
 	currentState PowerState,
-	version EncodedVersion,
+	version Version,
 	c *Client) error {
 
 	ca := c.new().apiRaw()
@@ -411,7 +455,7 @@ func (config ConfigLXC) update_Unsafe(
 		}
 
 		var newCurrent *rawConfigLXC
-		newCurrent, err = c.new().guestGetLxcRawConfig(ctx, vmr) // We have to refetch part of the current config
+		newCurrent, err = LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, ca, version) // We have to refetch part of the current config
 		if err != nil {
 			return err
 		}
@@ -467,15 +511,15 @@ func (config ConfigLXC) update_Unsafe(
 	return err
 }
 
-func (config ConfigLXC) Validate(current *ConfigLXC) (err error) {
+func (config ConfigLXC) Validate(current *ConfigLXC, version Version) (err error) {
 	if current != nil { // Update
-		err = config.validateUpdate(*current)
+		err = config.validateUpdate(*current, version)
 	} else { // Create
 		privileged := lxcDefaultPrivilege
 		if config.Privileged != nil {
 			privileged = *config.Privileged
 		}
-		err = config.validateCreate(privileged)
+		err = config.validateCreate(privileged, version)
 	}
 	if err != nil {
 		return
@@ -518,7 +562,7 @@ func (config ConfigLXC) Validate(current *ConfigLXC) (err error) {
 	return
 }
 
-func (config ConfigLXC) validateCreate(privileged bool) (err error) {
+func (config ConfigLXC) validateCreate(privileged bool, version Version) (err error) {
 	if config.BootMount == nil {
 		return errors.New(ConfigLXC_Error_BootMountMissing)
 	}
@@ -545,10 +589,10 @@ func (config ConfigLXC) validateCreate(privileged bool) (err error) {
 			return
 		}
 	}
-	return config.Networks.Validate(nil)
+	return config.Networks.Validate(nil, version)
 }
 
-func (config ConfigLXC) validateUpdate(current ConfigLXC) (err error) {
+func (config ConfigLXC) validateUpdate(current ConfigLXC, version Version) (err error) {
 	privileged := lxcDefaultPrivilege
 	if current.Privileged != nil {
 		privileged = *current.Privileged
@@ -574,11 +618,11 @@ func (config ConfigLXC) validateUpdate(current ConfigLXC) (err error) {
 			}
 		}
 	}
-	return config.Networks.Validate(current.Networks)
+	return config.Networks.Validate(current.Networks, version)
 }
 
 type RawConfigLXC interface {
-	Get(vmr VmRef, state PowerState) *ConfigLXC
+	Get(*PoolName, PowerState) *ConfigLXC
 	GetArchitecture() LxcCpuArchitecture
 	GetBootMount() *LxcBootMount
 	GetDNS() *GuestDNS
@@ -588,6 +632,7 @@ type RawConfigLXC interface {
 	GetMemory() LxcMemory
 	GetMounts() LxcMounts
 	GetName() GuestName
+	GetNetworks() LxcNetworks
 	GetNode() NodeName
 	GetOperatingSystem() OperatingSystem
 	GetPrivileged() bool
@@ -602,12 +647,17 @@ type rawConfigLXC struct {
 	a       map[string]any
 	guestID GuestID
 	node    NodeName
+	version EncodedVersion
 }
 
 var _ RawConfigLXC = (*rawConfigLXC)(nil)
 
-func (raw *rawConfigLXC) Get(vmr VmRef, state PowerState) *ConfigLXC {
-	config := raw.get(vmr)
+func (raw *rawConfigLXC) Get(pool *PoolName, state PowerState) *ConfigLXC {
+	var poolName PoolName
+	if pool != nil {
+		poolName = *pool
+	}
+	config := raw.get(poolName)
 	config.Digest = config.rawDigest.sha1()
 	if state != PowerStateUnknown {
 		config.State = &state
@@ -615,7 +665,7 @@ func (raw *rawConfigLXC) Get(vmr VmRef, state PowerState) *ConfigLXC {
 	return config
 }
 
-func (raw *rawConfigLXC) get(vmr VmRef) *ConfigLXC {
+func (raw *rawConfigLXC) get(pool PoolName) *ConfigLXC {
 	privileged := raw.isPrivileged()
 	config := ConfigLXC{
 		Architecture:    raw.GetArchitecture(),
@@ -624,22 +674,22 @@ func (raw *rawConfigLXC) get(vmr VmRef) *ConfigLXC {
 		DNS:             raw.GetDNS(),
 		Description:     raw.GetDescription(),
 		Features:        raw.getFeatures(privileged),
-		ID:              util.Pointer(raw.GetID()),
-		Memory:          util.Pointer(raw.GetMemory()),
+		ID:              new(raw.GetID()),
+		Memory:          new(raw.GetMemory()),
 		Mounts:          raw.getMounts(privileged),
-		Name:            util.Pointer(raw.GetName()),
+		Name:            new(raw.GetName()),
 		Networks:        raw.GetNetworks(),
-		Node:            util.Pointer(raw.GetNode()),
+		Node:            new(raw.GetNode()),
 		OperatingSystem: raw.GetOperatingSystem(),
 		Privileged:      &privileged,
-		Protection:      util.Pointer(raw.GetProtection()),
-		StartAtNodeBoot: util.Pointer(raw.GetStartAtNodeBoot()),
+		Protection:      new(raw.GetProtection()),
+		StartAtNodeBoot: new(raw.GetStartAtNodeBoot()),
 		StartupShutdown: raw.GetStartupShutdown(),
-		Swap:            util.Pointer(raw.GetSwap()),
+		Swap:            new(raw.GetSwap()),
 		Tags:            new(raw.GetTags()),
 		rawDigest:       raw.getDigest()}
-	if vmr.pool != "" {
-		config.Pool = util.Pointer(PoolName(vmr.pool))
+	if pool != "" {
+		config.Pool = &pool
 	}
 	return &config
 }
@@ -852,8 +902,7 @@ type LxcSwap uint
 
 func (swap LxcSwap) String() string { return strconv.Itoa(int(swap)) } // String is for fmt.Stringer.
 
-// NewRawConfigLXCFromAPI returns the configuration of the LXC guest.
-// Including pending changes.
+// Deprecated use LxcGuestInterface.Read() instead.
 func NewRawConfigLXCFromAPI(ctx context.Context, vmr *VmRef, c *Client) (RawConfigLXC, error) {
 	if vmr == nil {
 		return nil, errors.New(VmRef_Error_Nil)
@@ -861,26 +910,7 @@ func NewRawConfigLXCFromAPI(ctx context.Context, vmr *VmRef, c *Client) (RawConf
 	if c == nil {
 		return nil, errors.New(Client_Error_Nil)
 	}
-	if err := c.CheckVmRef(ctx, vmr); err != nil {
-		return nil, err
-	}
-	return c.new().guestGetLxcRawConfig(ctx, vmr)
-}
-
-func guestGetLxcRawConfig_Unsafe(ctx context.Context, vmr *VmRef, c clientApiInterface) (*rawConfigLXC, error) {
-	rawConfig, err := c.getGuestConfig(ctx, vmr)
-	if err != nil {
-		return nil, err
-	}
-	return &rawConfigLXC{
-		a:       rawConfig,
-		guestID: vmr.vmId,
-		node:    vmr.node,
-	}, nil
-}
-
-func (c *clientNewTest) guestGetLxcRawConfig(ctx context.Context, vmr *VmRef) (*rawConfigLXC, error) {
-	return guestGetLxcRawConfig_Unsafe(ctx, vmr, c.api)
+	return c.New().LxcGuest.Read(ctx, *vmr)
 }
 
 // NewActiveRawConfigLXCFromApi returns the active configuration of the LXC guest.

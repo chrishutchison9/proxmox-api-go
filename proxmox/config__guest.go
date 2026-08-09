@@ -63,11 +63,12 @@ type GuestDNS struct {
 
 func (config GuestDNS) mapToApiCreate(params map[string]any) {
 	if config.NameServers != nil && len(*config.NameServers) > 0 {
-		var nameservers string
+		var nameservers strings.Builder
 		for _, ns := range *config.NameServers {
-			nameservers += " " + ns.String()
+			nameservers.WriteRune(' ')
+			nameservers.WriteString(ns.String())
 		}
-		params[guestApiKeyNameServer] = nameservers[1:]
+		params[guestApiKeyNameServer] = nameservers.String()[1:]
 	}
 	if config.SearchDomain != nil && *config.SearchDomain != "" {
 		params[guestApiKeySearchDomain] = *config.SearchDomain
@@ -189,23 +190,29 @@ const (
 )
 
 // unsafe requires caller to check for nil
-func (rate GuestNetworkRate) mapToAPI() string {
+func (rate GuestNetworkRate) mapToAPI(b *strings.Builder) {
 	if rate == GuestNetworkRateUnlimited {
-		return ""
+		return
 	}
+	b.WriteString(comma + "rate" + equal)
 	rawRate := strconv.Itoa(int(rate))
 	length := len(rawRate)
 	if length > 3 {
 		// Insert a decimal point three places from the end
 		if rate%1000 == 0 {
-			return ",rate=" + rawRate[:length-3]
+			b.WriteString(rawRate[:length-3])
+			return
 		} else {
-			return strings.TrimRight(",rate="+rawRate[:length-3]+"."+rawRate[length-3:], "0")
+			b.WriteString(rawRate[:length-3])
+			b.WriteRune('.')
+			b.WriteString(strings.TrimRight(rawRate[length-3:], "0"))
+			return
 		}
 	}
 	// Prepend zeros to ensure decimal places
 	prefixRate := "000" + rawRate
-	return strings.TrimRight(",rate=0."+prefixRate[length:], "0")
+	b.WriteString("0.")
+	b.WriteString(strings.TrimRight(prefixRate[length:], "0"))
 }
 
 func (GuestNetworkRate) mapToSDK(rawRate string) *GuestNetworkRate {
@@ -275,7 +282,7 @@ const (
 	GuestIdMinimum        = 100
 )
 
-func (guestID GuestID) setPool(ctx context.Context, c *clientAPI, newPool PoolName, currentPool *PoolName, version EncodedVersion) (err error) {
+func (guestID GuestID) setPool(ctx context.Context, c *clientAPI, newPool PoolName, currentPool *PoolName, version Version) (err error) {
 	if newPool == "" {
 		if currentPool != nil && *currentPool != "" { // leave pool
 			if err = (*currentPool).removeMembers(ctx, c, &[]GuestID{guestID}, nil); err != nil {
@@ -284,7 +291,7 @@ func (guestID GuestID) setPool(ctx context.Context, c *clientAPI, newPool PoolNa
 		}
 	} else {
 		if currentPool == nil || *currentPool == "" { // join pool
-			if version < version_8_0_0 {
+			if version.Major < 8 {
 				if err = newPool.addGuestsV7(ctx, c, &[]GuestID{guestID}, nil); err != nil {
 					return
 				}
@@ -292,7 +299,7 @@ func (guestID GuestID) setPool(ctx context.Context, c *clientAPI, newPool PoolNa
 				newPool.addGuestsV8(ctx, c, &[]GuestID{guestID}, nil)
 			}
 		} else if newPool != *currentPool { // change pool
-			if version < version_8_0_0 {
+			if version.Major < 8 {
 				if err = (*currentPool).removeMembers(ctx, c, &[]GuestID{guestID}, nil); err != nil {
 					return
 				}

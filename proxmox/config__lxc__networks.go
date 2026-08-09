@@ -8,16 +8,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Telmate/proxmox-api-go/internal/util"
+	"github.com/Telmate/proxmox-api-go/internal/body"
 )
 
 // manual is programmed here
 // https://github.com/proxmox/proxmox-ve-rs/blob/1811e0560cb11186aa94fe24605ce8bf7d05cc62/proxmox-ve-config/src/guest/vm.rs#L154
 
 type LxcNetwork struct {
-	Bridge        *string           `json:"bridge,omitempty"`    // Required for creation. Never nil when returned
-	Connected     *bool             `json:"connected,omitempty"` // Never nil when returned
-	Firewall      *bool             `json:"firewall,omitempty"`  // Never nil when returned
+	Bridge        *string           `json:"bridge,omitempty"`       // Required for creation. Never nil when returned
+	Connected     *bool             `json:"connected,omitempty"`    // Never nil when returned
+	Firewall      *bool             `json:"firewall,omitempty"`     // Never nil when returned
+	HostManaged   *bool             `json:"host_managed,omitempty"` // TODO add validation. Only avalible in PVE 9 and up. Never nil from PVE 9 and up
 	IPv4          *LxcIPv4          `json:"ipv4,omitempty"`
 	IPv6          *LxcIPv6          `json:"ipv6,omitempty"`
 	MAC           *net.HardwareAddr `json:"mac,omitempty"` // Never nil when returned
@@ -31,156 +32,179 @@ type LxcNetwork struct {
 }
 
 const (
+	LxcNetwork_Error_HostManaged    = "lxc network host managed only availible from PVE 9.1 and up"
 	LxcNetwork_Error_BridgeRequired = "lxc network bridge is required for creation"
 	LxcNetwork_Error_NameRequired   = "lxc network name is required for creation"
 )
 
-func (config LxcNetwork) mapToApiCreate() string {
-	var settings string
+func (config LxcNetwork) mapToApiCreate(b *strings.Builder) {
 	if config.Name != nil {
-		settings += "name=" + config.Name.String()
+		b.WriteString("name" + equal)
+		b.WriteString(config.Name.String())
 	}
 	if config.Bridge != nil {
-		settings += ",bridge=" + *config.Bridge
+		b.WriteString(comma + "bridge" + equal)
+		b.WriteString(*config.Bridge)
 	}
 	if config.Connected != nil && !(*config.Connected) {
-		settings += ",link_down=1"
+		b.WriteString(comma + "link_down" + equal + "1")
 	}
 	if config.Firewall != nil && *config.Firewall {
-		settings += ",firewall=1"
+		b.WriteString(comma + "firewall" + equal + "1")
+	}
+	if config.HostManaged != nil && *config.HostManaged {
+		b.WriteString(comma + "host-managed" + equal + "1")
 	}
 	if config.IPv4 != nil {
-		settings += config.IPv4.mapToApiCreate()
+		config.IPv4.mapToApiCreate(b)
 	}
 	if config.IPv6 != nil {
-		settings += config.IPv6.mapToApiCreate()
+		config.IPv6.mapToApiCreate(b)
 	}
 	if config.MAC != nil {
-		mac := config.MAC.String() // Returns a lowercase MAC address
-		if mac != "" {
-			if mac == strings.ToLower(config.mac) { // Preserve the original case, changing causes network interface reconnect
-				mac = config.mac
-			} else {
-				mac = strings.ToUpper(mac)
-			}
-			settings += ",hwaddr=" + mac
+		if mac := config.MAC.String(); mac != "" { // Returns a lowercase MAC address
+			b.WriteString(comma + "hwaddr" + equal)
+			b.WriteString(body.Escape(strings.ToUpper(mac)))
 		}
 	}
 	if config.Mtu != nil && *config.Mtu != 0 {
-		settings += ",mtu=" + config.Mtu.String()
+		b.WriteString(comma + "mtu" + equal)
+		b.WriteString(config.Mtu.String())
 	}
 	if config.NativeVlan != nil && *config.NativeVlan != 0 {
-		settings += ",tag=" + config.NativeVlan.String()
+		b.WriteString(comma + "tag" + equal)
+		b.WriteString(config.NativeVlan.String())
 	}
 	if config.RateLimitKBps != nil {
-		settings += config.RateLimitKBps.mapToAPI()
+		config.RateLimitKBps.mapToAPI(b)
 	}
 	if config.TaggedVlans != nil {
 		if v := config.TaggedVlans.string(); v != "" {
-			settings += ",trunks=" + v
+			b.WriteString(comma + "trunks" + equal)
+			b.WriteString(v)
 		}
 	}
-	return settings
 }
 
-func (config LxcNetwork) mapToApiUpdate(current LxcNetwork) string {
-	var settings string
+func (config LxcNetwork) mapToApiUpdate(current *LxcNetwork) string {
+	var b strings.Builder
+	bPtr := &b
+	b.WriteString("name" + equal)
 	if config.Name != nil {
-		settings += "name=" + config.Name.String()
-	} else if current.Name != nil {
-		settings += "name=" + current.Name.String()
+		b.WriteString(config.Name.String())
+	} else {
+		b.WriteString(current.Name.String())
 	}
+	b.WriteString(comma + "bridge" + equal)
 	if config.Bridge != nil {
-		settings += ",bridge=" + *config.Bridge
-	} else if current.Bridge != nil {
-		settings += ",bridge=" + *current.Bridge
+		b.WriteString(*config.Bridge)
+	} else {
+		b.WriteString(*current.Bridge)
 	}
 	if config.Connected != nil {
-		if !*config.Connected {
-			settings += ",link_down=1"
+		if !(*config.Connected) {
+			b.WriteString(comma + "link_down" + equal + "1")
 		}
-	} else if current.Connected != nil && !(*current.Connected) {
-		settings += ",link_down=1"
+	} else if !(*current.Connected) {
+		b.WriteString(comma + "link_down" + equal + "1")
 	}
 	if config.Firewall != nil {
 		if *config.Firewall {
-			settings += ",firewall=1"
+			b.WriteString(comma + "firewall" + equal + "1")
 		}
-	} else if current.Firewall != nil && *current.Firewall {
-		settings += ",firewall=1"
+	} else if *current.Firewall {
+		b.WriteString(comma + "firewall" + equal + "1")
+	}
+	if config.HostManaged != nil {
+		if *config.HostManaged {
+			b.WriteString(comma + "host-managed" + equal + "1")
+		}
+	} else if current.HostManaged != nil && *current.HostManaged {
+		b.WriteString(comma + "host-managed" + equal + "1")
 	}
 	if config.IPv4 != nil {
 		if current.IPv4 != nil {
-			settings += config.IPv4.mapToApiUpdate(*current.IPv4)
+			config.IPv4.mapToApiUpdate(*current.IPv4, bPtr)
 		} else {
-			settings += config.IPv4.mapToApiCreate()
+			config.IPv4.mapToApiCreate(bPtr)
 		}
 	} else if current.IPv4 != nil {
-		settings += current.IPv4.mapToApiCreate()
+		current.IPv4.mapToApiCreate(bPtr)
 	}
 	if config.IPv6 != nil {
 		if current.IPv6 != nil {
-			settings += config.IPv6.mapToApiUpdate(*current.IPv6)
+			config.IPv6.mapToApiUpdate(*current.IPv6, bPtr)
 		} else {
-			settings += config.IPv6.mapToApiCreate()
+			config.IPv6.mapToApiCreate(bPtr)
 		}
 	} else if current.IPv6 != nil {
-		settings += current.IPv6.mapToApiCreate()
+		current.IPv6.mapToApiCreate(bPtr)
 	}
 	if config.MAC != nil {
 		mac := config.MAC.String() // Returns a lowercase MAC address
 		if mac != "" {
-			if mac == strings.ToLower(config.mac) { // Preserve the original case, changing causes network interface reconnect
-				mac = config.mac
+			if mac == strings.ToLower(current.mac) { // Preserve the original case, changing causes network interface reconnect
+				mac = current.mac
 			} else {
 				mac = strings.ToUpper(mac)
 			}
-			settings += ",hwaddr=" + mac
+			b.WriteString(comma + "hwaddr" + equal)
+			b.WriteString(body.Escape(mac))
 		}
-	} else if current.MAC != nil {
-		settings += ",hwaddr=" + current.mac
+	} else {
+		b.WriteString(comma + "hwaddr" + equal)
+		b.WriteString(body.Escape(current.mac))
 	}
 	if config.Mtu != nil {
 		if *config.Mtu != 0 {
-			settings += ",mtu=" + config.Mtu.String()
+			b.WriteString(comma + "mtu" + equal)
+			b.WriteString(config.Mtu.String())
 		}
 	} else if current.Mtu != nil && *current.Mtu != 0 {
-		settings += ",mtu=" + current.Mtu.String()
+		b.WriteString(comma + "mtu" + equal)
+		b.WriteString(current.Mtu.String())
 	}
 	if config.NativeVlan != nil {
 		if *config.NativeVlan != 0 {
-			settings += ",tag=" + config.NativeVlan.String()
+			b.WriteString(comma + "tag" + equal)
+			b.WriteString(config.NativeVlan.String())
 		}
 	} else if current.NativeVlan != nil && *current.NativeVlan != 0 {
-		settings += ",tag=" + current.NativeVlan.String()
+		b.WriteString(comma + "tag" + equal)
+		b.WriteString(current.NativeVlan.String())
 	}
 	if config.RateLimitKBps != nil {
-		settings += config.RateLimitKBps.mapToAPI()
+		config.RateLimitKBps.mapToAPI(bPtr)
 	} else if current.RateLimitKBps != nil {
-		settings += current.RateLimitKBps.mapToAPI()
+		current.RateLimitKBps.mapToAPI(bPtr)
 	}
 	if config.TaggedVlans != nil {
 		if v := config.TaggedVlans.string(); v != "" {
-			settings += ",trunks=" + v
+			b.WriteString(comma + "trunks" + equal)
+			b.WriteString(v)
 		}
 	} else if current.TaggedVlans != nil {
 		if v := current.TaggedVlans.string(); v != "" {
-			settings += ",trunks=" + v
+			b.WriteString(comma + "trunks" + equal)
+			b.WriteString(v)
 		}
 	}
-	return settings
+	return b.String()
 }
 
-func (config LxcNetwork) Validate(current *LxcNetwork) error {
+func (config LxcNetwork) Validate(current *LxcNetwork, version Version) error {
 	if current == nil {
-		return config.validateCreate()
+		return config.validateCreate(version.Encode())
 	}
-	return config.validate()
+	return config.validate(version.Encode())
 }
 
-func (config LxcNetwork) validate() error {
+func (config LxcNetwork) validate(version EncodedVersion) error {
 	if config.Delete {
 		return nil
+	}
+	if config.HostManaged != nil && version < version_9_1_0 {
+		return errors.New(LxcNetwork_Error_HostManaged)
 	}
 	if config.IPv4 != nil {
 		if err := config.IPv4.Validate(); err != nil {
@@ -220,7 +244,7 @@ func (config LxcNetwork) validate() error {
 	return nil
 }
 
-func (config LxcNetwork) validateCreate() error {
+func (config LxcNetwork) validateCreate(version EncodedVersion) error {
 	if config.Delete {
 		return nil // nothing to validate
 	}
@@ -230,7 +254,7 @@ func (config LxcNetwork) validateCreate() error {
 	if config.Name == nil {
 		return errors.New(LxcNetwork_Error_NameRequired)
 	}
-	return config.validate()
+	return config.validate(version)
 }
 
 type LxcNetworks map[LxcNetworkID]LxcNetwork
@@ -241,37 +265,47 @@ const (
 	LxcNetworks_Error_DuplicateName = "lxc network name must be unique across all networks"
 )
 
-func (config LxcNetworks) mapToApiCreate(params map[string]any) {
+func (config LxcNetworks) mapToApiCreate(b *strings.Builder) {
 	for id, network := range config {
 		if network.Delete {
 			continue // nothing to delete
 		}
-		params[lxcPrefixApiKeyNetwork+id.String()] = network.mapToApiCreate()
+		b.WriteString("&" + lxcPrefixApiKeyNetwork)
+		b.WriteString(id.String())
+		b.WriteRune('=')
+		network.mapToApiCreate(b)
 	}
 }
 
-func (config LxcNetworks) mapToApiUpdate(current LxcNetworks, params map[string]any) (delete string) {
+func (config LxcNetworks) mapToApiUpdate(current LxcNetworks, b, delete *strings.Builder) {
 	for id, network := range config {
-		if v, isSet := current[id]; isSet {
+		if v, isSet := current[id]; isSet { // Update
 			if network.Delete {
-				delete = "," + lxcPrefixApiKeyNetwork + id.String()
+				delete.WriteString("," + lxcPrefixApiKeyNetwork)
+				delete.WriteString(id.String())
 				continue
 			}
-			newNetwork := network.mapToApiUpdate(v)
-			if newNetwork != v.mapToApiCreate() {
-				params[lxcPrefixApiKeyNetwork+id.String()] = newNetwork
+			currentBody := v.mapToApiUpdate(&v)
+			updatedBody := network.mapToApiUpdate(&v)
+			if currentBody != updatedBody {
+				b.WriteString("&" + lxcPrefixApiKeyNetwork)
+				b.WriteString(id.String())
+				b.WriteRune('=')
+				b.WriteString(updatedBody)
 			}
-			continue
+		} else { // Create
+			if network.Delete {
+				continue // nothing to delete
+			}
+			b.WriteString("&" + lxcPrefixApiKeyNetwork)
+			b.WriteString(id.String())
+			b.WriteRune('=')
+			network.mapToApiCreate(b)
 		}
-		if network.Delete {
-			continue // nothing to delete
-		}
-		params[lxcPrefixApiKeyNetwork+id.String()] = network.mapToApiCreate()
 	}
-	return delete
 }
 
-func (config LxcNetworks) Validate(current LxcNetworks) error {
+func (config LxcNetworks) Validate(current LxcNetworks, version Version) error {
 	if len(config) > LxcNetworksAmount {
 		return errors.New(LxcNetworks_Error_Amount)
 	}
@@ -303,11 +337,11 @@ func (config LxcNetworks) Validate(current LxcNetworks) error {
 			return err
 		}
 		if _, isSet := current[id]; isSet {
-			if err = network.validate(); err != nil {
+			if err = network.validate(version.Encode()); err != nil {
 				return err
 			}
 		} else {
-			if err = network.validateCreate(); err != nil {
+			if err = network.validateCreate(version.Encode()); err != nil {
 				return err
 			}
 		}
@@ -315,6 +349,14 @@ func (config LxcNetworks) Validate(current LxcNetworks) error {
 	return nil
 }
 
+// LxcNetworkID
+//
+//	const (
+//		LxcNetworkID0
+//		...
+//		LxcNetworkID15
+//
+// )
 type LxcNetworkID uint8
 
 const (
@@ -364,11 +406,11 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 			if v, isSet := settings["bridge"]; isSet {
 				bridge = v
 			}
-			if v, isSet := settings["link_down"]; isSet && v == "1" {
-				connected = false
+			if v, isSet := settings["link_down"]; isSet {
+				connected = v != "1"
 			}
-			if v, isSet := settings["firewall"]; isSet && v == "1" {
-				firewall = true
+			if v, isSet := settings["firewall"]; isSet {
+				firewall = v == "1"
 			}
 			if v, isSet := settings["name"]; isSet {
 				name = LxcNetworkName(v)
@@ -384,6 +426,13 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				MAC:       &mac,
 				Name:      &name,
 				mac:       macOriginal}
+			if raw.version >= version_9_1_0 {
+				var hostManaged bool = false
+				if v, isSet := settings["host-managed"]; isSet {
+					hostManaged = v == "1"
+				}
+				network.HostManaged = &hostManaged
+			}
 			var ipSet bool
 			var ipv4 LxcIPv4
 			if v, isSet := settings["ip"]; isSet {
@@ -394,12 +443,12 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				case "manual":
 					ipv4.Manual = true
 				default:
-					ipv4.Address = util.Pointer(IPv4CIDR(v))
+					ipv4.Address = new(IPv4CIDR(v))
 				}
 			}
 			if v, isSet := settings["gw"]; isSet {
 				ipSet = true
-				ipv4.Gateway = util.Pointer(IPv4Address(v))
+				ipv4.Gateway = new(IPv4Address(v))
 			}
 			if ipSet {
 				network.IPv4 = &ipv4
@@ -416,23 +465,23 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				case "manual":
 					ipv6.Manual = true
 				default:
-					ipv6.Address = util.Pointer(IPv6CIDR(v))
+					ipv6.Address = new(IPv6CIDR(v))
 				}
 			}
 			if v, isSet := settings["gw6"]; isSet {
 				ipSet = true
-				ipv6.Gateway = util.Pointer(IPv6Address(v))
+				ipv6.Gateway = new(IPv6Address(v))
 			}
 			if ipSet {
 				network.IPv6 = &ipv6
 			}
 			if v, isSet := settings["mtu"]; isSet {
 				mtu, _ := strconv.Atoi(v)
-				network.Mtu = util.Pointer(MTU(mtu))
+				network.Mtu = new(MTU(mtu))
 			}
 			if v, isSet := settings["tag"]; isSet {
 				tag, _ := strconv.Atoi(v)
-				network.NativeVlan = util.Pointer(Vlan(tag))
+				network.NativeVlan = new(Vlan(tag))
 			}
 			if v, isSet := settings["rate"]; isSet {
 				network.RateLimitKBps = GuestNetworkRate(0).mapToSDK(v)
@@ -446,7 +495,7 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 					taggedVlans[i] = Vlan(vlan)
 				}
 				slices.Sort(taggedVlans)
-				network.TaggedVlans = util.Pointer(taggedVlans)
+				network.TaggedVlans = new(taggedVlans)
 			}
 			nets[LxcNetworkID(i)] = network
 		}
@@ -512,47 +561,51 @@ func (config LxcIPv4) combine(current LxcIPv4) LxcIPv4 {
 	return combined
 }
 
-func (config LxcIPv4) mapToApiCreate() string {
+func (config LxcIPv4) mapToApiCreate(b *strings.Builder) {
 	if config.DHCP {
-		return ",ip=dhcp"
+		b.WriteString(comma + "ip" + equal + "dhcp")
+		return
 	}
 	if config.Manual {
-		return ",ip=manual"
+		b.WriteString(comma + "ip" + equal + "manual")
+		return
 	}
-	var settings string
 	if config.Address != nil {
 		if v := config.Address.String(); v != "" {
-			settings += ",ip=" + v
+			b.WriteString(comma + "ip" + equal)
+			b.WriteString(body.Escape(v))
 		}
 	}
 	if config.Gateway != nil {
 		if v := config.Gateway.String(); v != "" {
-			return settings + ",gw=" + v
+			b.WriteString(comma + "gw" + equal)
+			b.WriteString(v)
 		}
 	}
-	return settings
 }
 
-func (config LxcIPv4) mapToApiUpdate(current LxcIPv4) string {
+func (config LxcIPv4) mapToApiUpdate(current LxcIPv4, b *strings.Builder) {
 	combined := config.combine(current) // Combine the current and new config to preserve settings not being updated
 	if combined.DHCP {
-		return ",ip=dhcp"
+		b.WriteString(comma + "ip" + equal + "dhcp")
+		return
 	}
 	if combined.Manual {
-		return ",ip=manual"
+		b.WriteString(comma + "ip" + equal + "manual")
+		return
 	}
-	var settings string
 	if combined.Address != nil {
 		if v := combined.Address.String(); v != "" {
-			settings += ",ip=" + v
+			b.WriteString(comma + "ip" + equal)
+			b.WriteString(strings.ReplaceAll(v, "/", body.Slash))
 		}
 	}
 	if combined.Gateway != nil {
 		if v := combined.Gateway.String(); v != "" {
-			return settings + ",gw=" + v
+			b.WriteString(comma + "gw" + equal)
+			b.WriteString(v)
 		}
 	}
-	return settings
 }
 
 func (ipv4 LxcIPv4) Validate() error {
@@ -615,53 +668,59 @@ func (config LxcIPv6) combine(current LxcIPv6) LxcIPv6 {
 	return combined
 }
 
-func (config LxcIPv6) mapToApiCreate() string {
+func (config LxcIPv6) mapToApiCreate(b *strings.Builder) {
 	if config.DHCP {
-		return ",ip6=dhcp"
+		b.WriteString(comma + "ip6" + equal + "dhcp")
+		return
 	}
 	if config.SLAAC {
-		return ",ip6=auto"
+		b.WriteString(comma + "ip6" + equal + "auto")
+		return
 	}
 	if config.Manual {
-		return ",ip6=manual"
+		b.WriteString(comma + "ip6" + equal + "manual")
+		return
 	}
-	var settings string
 	if config.Address != nil {
 		if v := config.Address.String(); v != "" {
-			settings += ",ip6=" + v
+			b.WriteString(comma + "ip6" + equal)
+			b.WriteString(body.Escape(v))
 		}
 	}
 	if config.Gateway != nil {
 		if v := config.Gateway.String(); v != "" {
-			return settings + ",gw6=" + v
+			b.WriteString(comma + "gw6" + equal)
+			b.WriteString(body.Escape(v))
 		}
 	}
-	return settings
 }
 
-func (config LxcIPv6) mapToApiUpdate(current LxcIPv6) string {
+func (config LxcIPv6) mapToApiUpdate(current LxcIPv6, b *strings.Builder) {
 	combined := config.combine(current)
 	if combined.DHCP {
-		return ",ip6=dhcp"
+		b.WriteString(comma + "ip6" + equal + "dhcp")
+		return
 	}
 	if combined.Manual {
-		return ",ip6=manual"
+		b.WriteString(comma + "ip6" + equal + "manual")
+		return
 	}
 	if combined.SLAAC {
-		return ",ip6=auto"
+		b.WriteString(comma + "ip6" + equal + "auto")
+		return
 	}
-	var settings string
 	if combined.Address != nil {
 		if v := combined.Address.String(); v != "" {
-			settings += ",ip6=" + v
+			b.WriteString(comma + "ip6" + equal)
+			b.WriteString(body.Escape(v))
 		}
 	}
 	if combined.Gateway != nil {
 		if v := combined.Gateway.String(); v != "" {
-			return settings + ",gw6=" + v
+			b.WriteString(comma + "gw6" + equal)
+			b.WriteString(body.Escape(v))
 		}
 	}
-	return settings
 }
 
 func (ipv6 LxcIPv6) Validate() error {

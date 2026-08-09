@@ -74,7 +74,7 @@ const (
 
 // VmRef - virtual machine ref parts
 // map[type:qemu node:proxmox1-xx id:qemu/132 diskread:5.57424738e+08 disk:0 netin:5.9297450593e+10 mem:3.3235968e+09 uptime:1.4567097e+07 vmid:132 template:0 maxcpu:2 netout:6.053310416e+09 maxdisk:3.4359738368e+10 maxmem:8.592031744e+09 diskwrite:1.49663619584e+12 status:running cpu:0.00386980694947209 name:appt-app1-dev.xxx.xx]
-type VmRef struct {
+type VmRef struct { // In the future this will be replaced by GuestRef and guestRef.
 	vmId    GuestID
 	node    NodeName
 	pool    PoolName
@@ -171,6 +171,7 @@ func (c *Client) New() ClientNew {
 		ApiToken:  &apiTokenClient{oldClient: c, api: apiClientPtr},
 		Group:     &groupClient{oldClient: c, api: apiClientPtr},
 		Guest:     &guestClient{oldClient: c, api: apiClientPtr},
+		LxcGuest:  &lxcGuestClient{oldClient: c, api: apiClientPtr},
 		Pool:      &poolClient{oldClient: c, api: apiClientPtr},
 		QemuGuest: &qemuGuestClient{oldClient: c, api: apiClientPtr},
 		Snapshot:  &snapshotClient{oldClient: c, api: apiClientPtr},
@@ -2560,6 +2561,7 @@ func (v Version) String() string {
 type EncodedVersion uint32
 
 const (
+	version_9_1_0 EncodedVersion = 590080
 	version_9_0_0 EncodedVersion = 589824
 	version_8_0_0 EncodedVersion = 524288
 )

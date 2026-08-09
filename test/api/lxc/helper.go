@@ -13,7 +13,7 @@ func CheckConfig(t *testing.T, ctx context.Context, c *pveSDK.Client, guestID pv
 	raw, err := pveSDK.NewRawConfigLXCFromAPI(ctx, vmr, c)
 	require.NoError(t, err)
 	require.NotNil(t, raw)
-	config := raw.Get(pveSDK.VmRef{}, pveSDK.PowerStateUnknown)
+	config := raw.Get(nil, pveSDK.PowerStateUnknown)
 	config.Digest = [20]byte{} // Ignore digest for comparison as it is always different
 	require.EqualExportedValues(t, expected, *config)
 }

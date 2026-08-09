@@ -10,6 +10,15 @@ func QemuSshKeyEscape(s string) string { return escape(s, encodePveQemuSshKey) }
 const Symbols = " !\"#$%&'()*+,-./:;<=>?@[\\]^`_{|}~"
 const Alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRESTUVXYZ1234567890"
 
+const (
+	Colon     = "%3A"
+	Comma     = "%2C"
+	Equal     = "%3D"
+	Plus      = "%2B"
+	Semicolon = "%3B"
+	Slash     = "%2F"
+)
+
 type encoding int
 
 const (

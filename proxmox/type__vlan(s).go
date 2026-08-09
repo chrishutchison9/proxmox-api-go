@@ -44,10 +44,10 @@ func (config Vlans) string() string {
 	slices.Sort(uniqueArr)
 	builder := strings.Builder{}
 	for i := range uniqueArr {
-		builder.WriteRune(';')
+		builder.WriteString(semicolon)
 		builder.WriteString(strconv.Itoa(uniqueArr[i]))
 	}
-	return builder.String()[1:] // Skip the leading semicolon
+	return builder.String()[3:] // Skip the leading semicolon
 }
 
 func (config Vlans) Validate() error {

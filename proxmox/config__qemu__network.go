@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Telmate/proxmox-api-go/internal/body"
 	"github.com/Telmate/proxmox-api-go/internal/util"
 )
 
@@ -20,11 +21,11 @@ const QemuMTU_Error_Invalid string = "inherit and value are mutually exclusive"
 // unsafe requires caller to check for nil
 func (config *QemuMTU) mapToApiUnsafe(builder *strings.Builder) {
 	if config.Inherit {
-		builder.WriteString(",mtu=1")
+		builder.WriteString(comma + "mtu" + equal + "1")
 		return
 	}
 	if config.Value != 0 {
-		builder.WriteString(",mtu=")
+		builder.WriteString(comma + "mtu" + equal)
 		builder.WriteString(config.Value.string())
 	}
 }
@@ -61,149 +62,109 @@ type QemuNetworkInterface struct {
 	mac           string
 }
 
-func (config QemuNetworkInterface) mapToApi(current *QemuNetworkInterface) (settings string) {
-	builder := strings.Builder{}
-	var mac, model string
-	if current != nil { // Update
-		if config.Model != nil {
-			model = config.Model.String()
-		} else if current.Model != nil {
-			model = current.Model.String()
-		}
-		builder.WriteString(model)
-		if config.MAC != nil {
-			mac = config.MAC.String() // Returns a lowercase MAC address
-			if mac != "" {
-				if mac == strings.ToLower(current.mac) { // Preserve the original case, changing causes network interface reconnect
-					mac = current.mac
-				} else {
-					mac = strings.ToUpper(mac)
-				}
-				builder.WriteRune('=')
-				builder.WriteString(mac)
-			}
-		} else if current.MAC != nil {
-			if current.mac != "" {
-				mac = current.mac
-			} else {
-				mac = strings.ToUpper(current.MAC.String())
-			}
-			builder.WriteRune('=')
-			builder.WriteString(mac)
-		}
-		if config.Bridge != nil {
-			builder.WriteString(",bridge=")
-			builder.WriteString(*config.Bridge)
-		} else if current.Bridge != nil {
-			builder.WriteString(",bridge=")
-			builder.WriteString(*current.Bridge)
-		}
-		if config.Firewall != nil {
-			if *config.Firewall {
-				builder.WriteString(",firewall=")
-				builder.WriteRune(bTOr(*config.Firewall))
-			}
-		} else if current.Firewall != nil && *current.Firewall {
-			builder.WriteString(",firewall=")
-			builder.WriteRune(bTOr(*current.Firewall))
-		}
-		if config.Connected != nil {
-			if !*config.Connected {
-				builder.WriteString(",link_down=")
-				builder.WriteRune(bTOr(!*config.Connected))
-			}
-		} else if current.Connected != nil && !*current.Connected {
-			builder.WriteString(",link_down=")
-			builder.WriteRune(bTOr(!*current.Connected))
-		}
-		if model == string(QemuNetworkModelVirtIO) {
-			if config.MTU != nil {
-				config.MTU.mapToApiUnsafe(&builder)
-			} else if current.MTU != nil {
-				current.MTU.mapToApiUnsafe(&builder)
-			}
-		}
-		if config.MultiQueue != nil {
-			if *config.MultiQueue != 0 {
-				builder.WriteString(",queues=")
-				builder.WriteString(strconv.Itoa(int(*config.MultiQueue)))
-			}
-		} else if current.MultiQueue != nil && *current.MultiQueue != 0 {
-			builder.WriteString(",queues=")
-			builder.WriteString(strconv.Itoa(int(*current.MultiQueue)))
-		}
-		if config.RateLimitKBps != nil {
-			builder.WriteString(config.RateLimitKBps.mapToAPI())
-		} else if current.RateLimitKBps != nil {
-			builder.WriteString(current.RateLimitKBps.mapToAPI())
-		}
-		if config.NativeVlan != nil {
-			if *config.NativeVlan != 0 {
-				builder.WriteString(",tag=")
-				builder.WriteString(config.NativeVlan.String())
-			}
-		} else if current.NativeVlan != nil && *current.NativeVlan != 0 {
-			builder.WriteString(",tag=")
-			builder.WriteString(current.NativeVlan.String())
-		}
-		if config.TaggedVlans != nil {
-			if v := config.TaggedVlans.string(); v != "" {
-				builder.WriteString(",trunks=")
-				builder.WriteString(v)
-			}
-		} else if current.TaggedVlans != nil {
-			if v := current.TaggedVlans.string(); v != "" {
-				builder.WriteString(",trunks=")
-				builder.WriteString(v)
-			}
-		}
-		return builder.String()
+func (config *QemuNetworkInterface) combine(append QemuNetworkInterface) {
+	if append.Bridge != nil {
+		config.Bridge = append.Bridge
 	}
-	// Create
+	if append.Connected != nil {
+		config.Connected = append.Connected
+	}
+	if append.Firewall != nil {
+		config.Firewall = append.Firewall
+	}
+	if append.MAC != nil {
+		config.MAC = append.MAC
+	}
+	if append.MTU != nil {
+		config.MTU = append.MTU
+	}
+	if append.Model != nil {
+		config.Model = append.Model
+	}
+	if append.MultiQueue != nil {
+		config.MultiQueue = append.MultiQueue
+	}
+	if append.RateLimitKBps != nil {
+		config.RateLimitKBps = append.RateLimitKBps
+	}
+	if append.NativeVlan != nil {
+		config.NativeVlan = append.NativeVlan
+	}
+	if append.TaggedVlans != nil {
+		config.TaggedVlans = append.TaggedVlans
+	}
+}
+
+func (config QemuNetworkInterface) mapToApiCreate(b *strings.Builder) {
+	var model string
 	if config.Model != nil {
 		model = config.Model.String()
-		builder.WriteString(config.Model.String())
+		b.WriteString(model)
 	}
 	if config.MAC != nil {
-		mac = config.MAC.String()
+		mac := config.MAC.String()
 		if mac != "" {
-			builder.WriteRune('=')
-			builder.WriteString(strings.ToUpper(mac))
+			b.WriteString(equal)
+			b.WriteString(body.Escape(strings.ToUpper(mac)))
 		}
 	}
+	config.mapToApiShared(model, b)
+}
+
+func (config QemuNetworkInterface) mapToApiShared(model string, b *strings.Builder) {
 	if config.Bridge != nil {
-		builder.WriteString(",bridge=")
-		builder.WriteString(*config.Bridge)
+		b.WriteString(comma + "bridge" + equal)
+		b.WriteString(*config.Bridge)
 	}
 	if config.Firewall != nil && *config.Firewall {
-		builder.WriteString(",firewall=")
-		builder.WriteRune(bTOr(*config.Firewall))
+		b.WriteString(comma + "firewall" + equal)
+		b.WriteRune(bTOr(*config.Firewall))
 	}
 	if config.Connected != nil && !*config.Connected {
-		builder.WriteString(",link_down=")
-		builder.WriteRune(bTOr(!*config.Connected))
+		b.WriteString(comma + "link_down" + equal)
+		b.WriteRune(bTOr(!*config.Connected))
 	}
 	if config.MTU != nil && model == string(QemuNetworkModelVirtIO) {
-		config.MTU.mapToApiUnsafe(&builder)
+		config.MTU.mapToApiUnsafe(b)
 	}
 	if config.MultiQueue != nil && *config.MultiQueue != 0 {
-		builder.WriteString(",queues=")
-		builder.WriteString(strconv.Itoa(int(*config.MultiQueue)))
+		b.WriteString(comma + "queues" + equal)
+		b.WriteString(strconv.Itoa(int(*config.MultiQueue)))
 	}
 	if config.RateLimitKBps != nil {
-		builder.WriteString(config.RateLimitKBps.mapToAPI())
+		config.RateLimitKBps.mapToAPI(b)
 	}
 	if config.NativeVlan != nil && *config.NativeVlan != 0 {
-		builder.WriteString(",tag=")
-		builder.WriteString(config.NativeVlan.String())
+		b.WriteString(comma + "tag" + equal)
+		b.WriteString(config.NativeVlan.String())
 	}
 	if config.TaggedVlans != nil {
 		if v := config.TaggedVlans.string(); v != "" {
-			builder.WriteString(",trunks=")
-			builder.WriteString(v)
+			b.WriteString(comma + "trunks" + equal)
+			b.WriteString(v)
 		}
 	}
-	return builder.String()
+}
+
+func (config QemuNetworkInterface) mapToApiUpdate(b *strings.Builder) {
+	var mac, model string
+	if config.Model != nil {
+		model = config.Model.String()
+		b.WriteString(model)
+	}
+	if config.MAC != nil {
+		mac = config.MAC.String() // Returns a lowercase MAC address
+		if mac != "" {
+			if mac == strings.ToLower(config.mac) { // Preserve the original case, changing causes network interface reconnect
+				mac = config.mac
+			} else {
+				mac = strings.ToUpper(mac)
+			}
+			b.WriteString(equal)
+			b.WriteString(body.Escape(mac))
+		}
+	}
+	config.mapToApiShared(model, b)
 }
 
 func (QemuNetworkInterface) mapToSDK(rawParams string) (config QemuNetworkInterface) {
@@ -323,6 +284,14 @@ func (config QemuNetworkInterface) Validate(current *QemuNetworkInterface) error
 	return nil
 }
 
+// QemuNetworkInterfaceID
+//
+//	const (
+//		QemuNetworkInterfaceID0
+//		...
+//		QemuNetworkInterfaceID31
+//
+// )
 type QemuNetworkInterfaceID uint8
 
 const (
@@ -377,22 +346,49 @@ type QemuNetworkInterfaces map[QemuNetworkInterfaceID]QemuNetworkInterface
 
 const QemuNetworkInterfacesAmount = uint8(QemuNetworkInterfaceIDMaximum) + 1
 
-func (config QemuNetworkInterfaces) mapToAPI(current QemuNetworkInterfaces, params map[string]interface{}) (delete string) {
+func (config QemuNetworkInterfaces) mapToApiCreate(b *strings.Builder) {
+	for i, e := range config {
+		if e.Delete {
+			continue
+		}
+		b.WriteString("&" + qemuPrefixApiKeyNetwork)
+		b.WriteString(i.String())
+		b.WriteRune('=')
+		e.mapToApiCreate(b)
+	}
+}
+
+func (config QemuNetworkInterfaces) mapToApiUpdate(current QemuNetworkInterfaces, b, delete *strings.Builder) {
 	for i, e := range config {
 		if v, isSet := current[i]; isSet { // Update
 			if e.Delete {
-				delete += "," + qemuPrefixApiKeyNetwork + i.String()
+				delete.WriteString("," + qemuPrefixApiKeyNetwork)
+				delete.WriteString(i.String())
 				continue
 			}
-			params[qemuPrefixApiKeyNetwork+i.String()] = e.mapToApi(&v)
+			var builder strings.Builder
+			v.mapToApiUpdate(&builder)
+			currentString := builder.String()
+			builder.Reset()
+			v.combine(e)
+			v.mapToApiUpdate(&builder)
+			updateString := builder.String()
+			if currentString != updateString {
+				b.WriteString("&" + qemuPrefixApiKeyNetwork)
+				b.WriteString(i.String())
+				b.WriteRune('=')
+				b.WriteString(updateString)
+			}
 		} else { // Create
 			if e.Delete {
 				continue
 			}
-			params[qemuPrefixApiKeyNetwork+i.String()] = e.mapToApi(nil)
+			b.WriteString("&" + qemuPrefixApiKeyNetwork)
+			b.WriteString(i.String())
+			b.WriteRune('=')
+			e.mapToApiCreate(b)
 		}
 	}
-	return
 }
 
 func (raw *rawConfigQemu) GetNetworks() QemuNetworkInterfaces {
