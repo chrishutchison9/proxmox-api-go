@@ -9,7 +9,7 @@ import (
 
 func Benchmark_guestDoesNotExist(b *testing.B) {
 	id := GuestID(123)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := errorMsg{}.guestDoesNotExist(id)
 		_ = errors.Is(err, Error.GuestDoesNotExist())
 	}

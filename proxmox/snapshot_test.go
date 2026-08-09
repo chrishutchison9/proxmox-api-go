@@ -1460,9 +1460,8 @@ func Test_RawSnapshotTree_Current_and_Root(t *testing.T) {
 
 func Benchmark_RawSnapshotTree_Current_and_Root(b *testing.B) {
 	tests := test_RawSnapshotTree_Current_and_Root_data()
-	b.ResetTimer()
 	var result RawSnapshotTree
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, test := range tests {
 			result = RawSnapshots(&test.input).Tree()
 		}

@@ -886,8 +886,7 @@ func Benchmark_CpuType_Validate(b *testing.B) {
 	// prevent compiler optimizations
 	var result error
 	tests := test_CpuTypeValidate_data()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, test := range tests {
 			result = test.config.Validate(test.version)
 		}
