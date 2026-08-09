@@ -647,7 +647,7 @@ type rawConfigLXC struct {
 	a       map[string]any
 	guestID GuestID
 	node    NodeName
-	version Version
+	version EncodedVersion
 }
 
 var _ RawConfigLXC = (*rawConfigLXC)(nil)

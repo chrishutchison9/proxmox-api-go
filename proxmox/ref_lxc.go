@@ -40,6 +40,6 @@ func (ref LxcRef) read(ctx context.Context, c *clientAPI, version Version) (*raw
 		a:       rawConfig,
 		guestID: ref.ID,
 		node:    ref.Node,
-		version: version,
+		version: version.Encode(),
 	}, nil
 }

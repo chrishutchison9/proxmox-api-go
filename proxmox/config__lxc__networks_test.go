@@ -74,13 +74,13 @@ func testData_RawConfigLXC_Networks_Get() lxcTestGetFunc {
 			{name: `HostManaged false`,
 				input: rawConfigLXC{
 					a:       map[string]any{"net12": ""},
-					version: Version{Major: 9}},
+					version: Version{Major: 9, Minor: 1}.Encode()},
 				output: baseConfig(ConfigLXC{Networks: LxcNetworks{
 					LxcNetworkID12: baseNetwork(LxcNetwork{HostManaged: new(false)})}})},
 			{name: `HostManaged true`,
 				input: rawConfigLXC{
 					a:       map[string]any{"net12": "host-managed=1"},
-					version: Version{Major: 9}},
+					version: Version{Major: 9, Minor: 1}.Encode()},
 				output: baseConfig(ConfigLXC{Networks: LxcNetworks{
 					LxcNetworkID12: baseNetwork(LxcNetwork{HostManaged: new(true)})}})},
 			{name: `IPv4 Address`,
@@ -605,7 +605,7 @@ func Test_LxcNetwork_Validate(t *testing.T) {
 				{name: `errors.New(LxcNetwork_Error_HostManaged)`,
 					config:  baseConfig(LxcNetwork{HostManaged: new(true)}),
 					current: &LxcNetwork{},
-					version: Version{Major: 8},
+					version: Version{Major: 9},
 					err:     errors.New(LxcNetwork_Error_HostManaged)},
 				{name: `IPv4 errors.New(LxcIPv4_Error_MutuallyExclusiveAddress)`,
 					config: baseConfig(LxcNetwork{IPv4: &LxcIPv4{
@@ -649,10 +649,10 @@ func Test_LxcNetwork_Validate(t *testing.T) {
 				{name: `minimum`,
 					config: baseConfig(LxcNetwork{})}},
 			createUpdate: []test{
-				{name: `Host Managed v9`,
+				{name: `Host Managed v9.1`,
 					config:  baseConfig(LxcNetwork{HostManaged: new(true)}),
 					current: &LxcNetwork{},
-					version: Version{Major: 9}}},
+					version: Version{Major: 9, Minor: 1}}},
 			update: []test{
 				{name: `minimum`,
 					config:  LxcNetwork{},

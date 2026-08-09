@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/Telmate/proxmox-api-go/internal/body"
-	"github.com/Telmate/proxmox-api-go/internal/util"
 )
 
 // manual is programmed here
@@ -33,7 +32,7 @@ type LxcNetwork struct {
 }
 
 const (
-	LxcNetwork_Error_HostManaged    = "lxc network host managed only availible from PVE 9 and up"
+	LxcNetwork_Error_HostManaged    = "lxc network host managed only availible from PVE 9.1 and up"
 	LxcNetwork_Error_BridgeRequired = "lxc network bridge is required for creation"
 	LxcNetwork_Error_NameRequired   = "lxc network name is required for creation"
 )
@@ -195,16 +194,16 @@ func (config LxcNetwork) mapToApiUpdate(current *LxcNetwork) string {
 
 func (config LxcNetwork) Validate(current *LxcNetwork, version Version) error {
 	if current == nil {
-		return config.validateCreate(version)
+		return config.validateCreate(version.Encode())
 	}
-	return config.validate(version)
+	return config.validate(version.Encode())
 }
 
-func (config LxcNetwork) validate(version Version) error {
+func (config LxcNetwork) validate(version EncodedVersion) error {
 	if config.Delete {
 		return nil
 	}
-	if config.HostManaged != nil && version.Major < 9 {
+	if config.HostManaged != nil && version < version_9_1_0 {
 		return errors.New(LxcNetwork_Error_HostManaged)
 	}
 	if config.IPv4 != nil {
@@ -245,7 +244,7 @@ func (config LxcNetwork) validate(version Version) error {
 	return nil
 }
 
-func (config LxcNetwork) validateCreate(version Version) error {
+func (config LxcNetwork) validateCreate(version EncodedVersion) error {
 	if config.Delete {
 		return nil // nothing to validate
 	}
@@ -338,11 +337,11 @@ func (config LxcNetworks) Validate(current LxcNetworks, version Version) error {
 			return err
 		}
 		if _, isSet := current[id]; isSet {
-			if err = network.validate(version); err != nil {
+			if err = network.validate(version.Encode()); err != nil {
 				return err
 			}
 		} else {
-			if err = network.validateCreate(version); err != nil {
+			if err = network.validateCreate(version.Encode()); err != nil {
 				return err
 			}
 		}
@@ -427,7 +426,7 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				MAC:       &mac,
 				Name:      &name,
 				mac:       macOriginal}
-			if raw.version.Major >= 9 {
+			if raw.version >= version_9_1_0 {
 				var hostManaged bool = false
 				if v, isSet := settings["host-managed"]; isSet {
 					hostManaged = v == "1"
@@ -444,12 +443,12 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				case "manual":
 					ipv4.Manual = true
 				default:
-					ipv4.Address = util.Pointer(IPv4CIDR(v))
+					ipv4.Address = new(IPv4CIDR(v))
 				}
 			}
 			if v, isSet := settings["gw"]; isSet {
 				ipSet = true
-				ipv4.Gateway = util.Pointer(IPv4Address(v))
+				ipv4.Gateway = new(IPv4Address(v))
 			}
 			if ipSet {
 				network.IPv4 = &ipv4
@@ -466,23 +465,23 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 				case "manual":
 					ipv6.Manual = true
 				default:
-					ipv6.Address = util.Pointer(IPv6CIDR(v))
+					ipv6.Address = new(IPv6CIDR(v))
 				}
 			}
 			if v, isSet := settings["gw6"]; isSet {
 				ipSet = true
-				ipv6.Gateway = util.Pointer(IPv6Address(v))
+				ipv6.Gateway = new(IPv6Address(v))
 			}
 			if ipSet {
 				network.IPv6 = &ipv6
 			}
 			if v, isSet := settings["mtu"]; isSet {
 				mtu, _ := strconv.Atoi(v)
-				network.Mtu = util.Pointer(MTU(mtu))
+				network.Mtu = new(MTU(mtu))
 			}
 			if v, isSet := settings["tag"]; isSet {
 				tag, _ := strconv.Atoi(v)
-				network.NativeVlan = util.Pointer(Vlan(tag))
+				network.NativeVlan = new(Vlan(tag))
 			}
 			if v, isSet := settings["rate"]; isSet {
 				network.RateLimitKBps = GuestNetworkRate(0).mapToSDK(v)
@@ -496,7 +495,7 @@ func (raw *rawConfigLXC) GetNetworks() LxcNetworks {
 					taggedVlans[i] = Vlan(vlan)
 				}
 				slices.Sort(taggedVlans)
-				network.TaggedVlans = util.Pointer(taggedVlans)
+				network.TaggedVlans = new(taggedVlans)
 			}
 			nets[LxcNetworkID(i)] = network
 		}
