@@ -8,9 +8,38 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Telmate/proxmox-api-go/internal/util"
 )
+
+type (
+	LxcGuestInterface interface {
+		// Read returns the configuration of the LXC guest.
+		// Including pending changes.
+		Read(context.Context, VmRef) (RawConfigLXC, error)
+		ReadNoCheck(context.Context, VmRef) (RawConfigLXC, error)
+	}
+
+	lxcGuestClient struct {
+		api       *clientAPI
+		oldClient *Client
+	}
+)
+
+var _ LxcGuestInterface = (*lxcGuestClient)(nil)
+
+func (c *lxcGuestClient) Read(ctx context.Context, vmr VmRef) (RawConfigLXC, error) {
+	if _, err := vmr.check_unsafe(ctx, c.api); err != nil {
+		return nil, err
+	}
+	return c.ReadNoCheck(ctx, vmr)
+}
+
+func (c *lxcGuestClient) ReadNoCheck(ctx context.Context, vmr VmRef) (RawConfigLXC, error) {
+	version, err := c.oldClient.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api, version)
+}
 
 type LxcCpuArchitecture string
 

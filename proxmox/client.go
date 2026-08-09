@@ -171,6 +171,7 @@ func (c *Client) New() ClientNew {
 		ApiToken:  &apiTokenClient{oldClient: c, api: apiClientPtr},
 		Group:     &groupClient{oldClient: c, api: apiClientPtr},
 		Guest:     &guestClient{oldClient: c, api: apiClientPtr},
+		LxcGuest:  &lxcGuestClient{oldClient: c, api: apiClientPtr},
 		Pool:      &poolClient{oldClient: c, api: apiClientPtr},
 		QemuGuest: &qemuGuestClient{oldClient: c, api: apiClientPtr},
 		Snapshot:  &snapshotClient{oldClient: c, api: apiClientPtr},
