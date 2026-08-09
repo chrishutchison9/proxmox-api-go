@@ -18,4 +18,8 @@ func X_SuppressStaticCheck_DoNotUse() {
 	qemu := &RawConfigQemuMock{}
 	qemu.get(&VmRef{})
 
+	LxcRef{}.generalize()
+	QemuRef{}.generalize()
+	LxcRef{}.legacy()
+	QemuRef{}.legacy()
 }

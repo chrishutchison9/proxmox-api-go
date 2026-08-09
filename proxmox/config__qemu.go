@@ -391,9 +391,6 @@ func (config *ConfigQemu) mapToAPI(currentConfig ConfigQemu, version Version) (p
 		}
 	}
 
-	// Create networks config.
-	itemsToDelete += config.Networks.mapToAPI(currentConfig.Networks, params)
-
 	// Create vga config.
 	vgaParam := QemuDeviceParam{}
 	vgaParam = vgaParam.createDeviceParam(config.QemuVga, nil)
@@ -428,7 +425,10 @@ func (config ConfigQemu) mapToApiCreate(version Version) (map[string]any, *[]byt
 	if config.EfiDisk != nil {
 		config.EfiDisk.mapToApiCreate(bPtr)
 	}
-	if config.PciDevices != nil {
+	if len(config.Networks) != 0 {
+		config.Networks.mapToApiCreate(bPtr)
+	}
+	if len(config.PciDevices) != 0 {
 		config.PciDevices.mapToApiCreate(bPtr)
 	}
 	if config.State != nil && *config.State == PowerStateRunning {
@@ -484,8 +484,15 @@ func (config ConfigQemu) mapToApiUpdate(currentLegacy *ConfigQemu, current confi
 			config.EfiDisk.mapToApiCreate(bPtr)
 		}
 	}
-	if config.PciDevices != nil {
-		if currentLegacy.PciDevices != nil {
+	if len(config.Networks) != 0 {
+		if len(currentLegacy.Networks) != 0 {
+			config.Networks.mapToApiUpdate(currentLegacy.Networks, bPtr, deletePtr)
+		} else {
+			config.Networks.mapToApiCreate(bPtr)
+		}
+	}
+	if len(config.PciDevices) != 0 {
+		if len(currentLegacy.PciDevices) != 0 {
 			config.PciDevices.mapToApiUpdate(currentLegacy.PciDevices, bPtr, deletePtr)
 		} else {
 			config.PciDevices.mapToApiCreate(bPtr)
@@ -796,7 +803,6 @@ func (config ConfigQemu) updateNoCheck(
 		}
 	}
 
-	versionEncoded := version.Encode()
 	params, body := config.mapToApiUpdate(currentLegacy, updateConfig, version)
 	body = combineParamsAndBody(params, body)
 	if body != nil {
@@ -831,7 +837,7 @@ func (config ConfigQemu) updateNoCheck(
 	}
 
 	if config.Pool != nil { // update pool membership
-		if err = vmr.vmId.setPool(ctx, client.new().apiRaw(), *config.Pool, currentLegacy.Pool, versionEncoded); err != nil {
+		if err = vmr.vmId.setPool(ctx, client.new().apiRaw(), *config.Pool, currentLegacy.Pool, version); err != nil {
 			return
 		}
 	}

@@ -24,8 +24,14 @@ func (c *guestClient) Delete(ctx context.Context, vmr VmRef) (bool, error) {
 	var protection bool // Check if guest is protected
 	switch vmr.vmType {
 	case GuestLxc:
+		var version Version
+		version, err = c.oldClient.Version(ctx)
+		if err != nil {
+			return false, err
+		}
 		var raw *rawConfigLXC
-		if raw, err = guestGetLxcRawConfig_Unsafe(ctx, &vmr, c.api); err != nil {
+		raw, err = LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api, version)
+		if err != nil {
 			if apiErr, ok := err.(*ApiError); ok {
 				if strings.HasSuffix(apiErr.Message, " does not exist") { // "Configuration file 'nodes/pve-9l/lxc/1000.conf' does not exist"
 					return false, nil

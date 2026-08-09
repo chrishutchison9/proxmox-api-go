@@ -37,6 +37,7 @@ func Test_GuestInterface_Delete(t *testing.T) {
 			requests: mockServer.Append(
 				mockServer.RequestsGetJsonData("/cluster/resources?type=vm", []any{
 					map[string]any{"vmid": float64(200), "node": "pve2", "type": "lxc"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsError("/nodes/pve2/lxc/200/config", mockServer.GET, 500, 3)),
 			err: errors.New(mockServer.InternalServerError)},
 		{name: `get config qemu failed`,
@@ -51,6 +52,7 @@ func Test_GuestInterface_Delete(t *testing.T) {
 			requests: mockServer.Append(
 				mockServer.RequestsGetJsonData("/cluster/resources?type=vm", []any{
 					map[string]any{"vmid": float64(200), "node": "test", "type": "lxc"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{
 					"protection": float64(1)})),
 			err: &errorWrapper[GuestID]{
@@ -71,6 +73,7 @@ func Test_GuestInterface_Delete(t *testing.T) {
 			requests: mockServer.Append(
 				mockServer.RequestsGetJsonData("/cluster/resources?type=vm", []any{
 					map[string]any{"vmid": float64(200), "node": "test", "type": "lxc"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200/config", mockServer.GET, mockServer.JsonError(500, map[string]any{
 					"message": "Configuration file 'nodes/test/lxc-server/200.conf' does not exist"})))},
 		{name: `guest qemu deleted by external after list`,
@@ -172,10 +175,10 @@ func Test_GuestInterface_Delete(t *testing.T) {
 						"node":   "test",
 						"type":   "lxc",
 						"status": "stopped"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200", mockServer.DELETE, mockServer.JsonError(500, map[string]any{
 					"message": "unable to destroy CT 200 - container is running"})),
-				mockServer.RequestsVersion("7.255.255"),
 				// in loop
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200/status/stop", mockServer.POST, mockServer.JsonError(500, map[string]any{
 					"message": "CT 200 not running"})),
@@ -196,10 +199,10 @@ func Test_GuestInterface_Delete(t *testing.T) {
 						"node":   "test",
 						"type":   "lxc",
 						"status": "stopped"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200", mockServer.DELETE, mockServer.JsonError(500, map[string]any{
 					"message": "unable to destroy CT 200 - container is running"})),
-				mockServer.RequestsVersion("7.255.255"),
 				// in loop
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200/status/stop", mockServer.POST, mockServer.JsonError(500, map[string]any{
 					"message": "CT 200 not running"})),
@@ -219,8 +222,8 @@ func Test_GuestInterface_Delete(t *testing.T) {
 						"node":   "test",
 						"type":   "lxc",
 						"status": "running"}}),
-				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				mockServer.RequestsVersion("7.255.255"),
+				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				// in loop
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200/status/stop", mockServer.POST, mockServer.JsonError(500, map[string]any{
 					"message": "CT 200 not running"})),
@@ -279,10 +282,10 @@ func Test_GuestInterface_Delete(t *testing.T) {
 						"node":   "test",
 						"type":   "lxc",
 						"status": "stopped"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200", mockServer.DELETE, mockServer.JsonError(500, map[string]any{
 					"message": "unable to destroy CT 200 - container is running"})),
-				mockServer.RequestsVersion("7.255.255"),
 				// in loop
 				mockServer.RequestsError("/nodes/test/lxc/200/status/stop", mockServer.POST, 500, 3)),
 			err: errors.New(mockServer.InternalServerError)},
@@ -295,10 +298,10 @@ func Test_GuestInterface_Delete(t *testing.T) {
 						"node":   "test",
 						"type":   "lxc",
 						"status": "stopped"}}),
+				mockServer.RequestsVersion("7.255.255"),
 				mockServer.RequestsGetJsonData("/nodes/test/lxc/200/config", map[string]any{}),
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200", mockServer.DELETE, mockServer.JsonError(500, map[string]any{
 					"message": "unable to destroy CT 200 - container is running"})),
-				mockServer.RequestsVersion("7.255.255"),
 				// in loop
 				mockServer.RequestsErrorHandled("/nodes/test/lxc/200/status/stop", mockServer.POST, mockServer.JsonError(500, map[string]any{
 					"message": "random api error"}))),
