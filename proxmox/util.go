@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/Telmate/proxmox-api-go/internal/body"
 )
 
 var rxUserTokenExtract = regexp.MustCompile("[a-z0-9]+@[a-z0-9]+!([a-z0-9]+)")
@@ -19,11 +21,11 @@ const (
 )
 
 const (
-	colon     = "%3A"
-	comma     = "%2C"
-	equal     = "%3D"
-	plus      = "%2B"
-	semicolon = "%3B"
+	colon     = body.Colon
+	comma     = body.Comma
+	equal     = body.Equal
+	plus      = body.Plus
+	semicolon = body.Semicolon
 )
 
 const hexPrefix string = "0x"
