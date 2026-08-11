@@ -18,7 +18,7 @@ type LxcNetwork struct {
 	Bridge        *string           `json:"bridge,omitempty"`       // Required for creation. Never nil when returned
 	Connected     *bool             `json:"connected,omitempty"`    // Never nil when returned
 	Firewall      *bool             `json:"firewall,omitempty"`     // Never nil when returned
-	HostManaged   *bool             `json:"host_managed,omitempty"` // TODO add validation. Only avalible in PVE 9 and up. Never nil from PVE 9 and up
+	HostManaged   *bool             `json:"host_managed,omitempty"` // Only avalible in PVE 9.1 and up. Never nil from PVE 9.1 and up
 	IPv4          *LxcIPv4          `json:"ipv4,omitempty"`
 	IPv6          *LxcIPv6          `json:"ipv6,omitempty"`
 	MAC           *net.HardwareAddr `json:"mac,omitempty"` // Never nil when returned
