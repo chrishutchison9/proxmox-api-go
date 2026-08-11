@@ -143,7 +143,7 @@ func (config LxcNetwork) mapToApiUpdate(current *LxcNetwork) string {
 	if config.MAC != nil {
 		mac := config.MAC.String() // Returns a lowercase MAC address
 		if mac != "" {
-			if mac == strings.ToLower(current.mac) { // Preserve the original case, changing causes network interface reconnect
+			if strings.EqualFold(mac, current.mac) { // Preserve the original case, changing causes network interface reconnect
 				mac = current.mac
 			} else {
 				mac = strings.ToUpper(mac)
