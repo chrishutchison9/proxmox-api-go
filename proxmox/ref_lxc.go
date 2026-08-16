@@ -43,3 +43,11 @@ func (ref LxcRef) read(ctx context.Context, c *clientAPI, version Version) (*raw
 		version: version.Encode(),
 	}, nil
 }
+
+func (ref LxcRef) readInterfaceStatus(ctx context.Context, c *clientAPI) (*rawLxcInfoNetworkInterfaces, error) {
+	raw, err := c.getList(ctx, "/nodes/"+ref.Node.String()+"/lxc/"+ref.ID.String()+"/interfaces", "", "")
+	if err != nil {
+		return nil, err
+	}
+	return &rawLxcInfoNetworkInterfaces{a: raw}, nil
+}
