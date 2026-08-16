@@ -16,6 +16,10 @@ type (
 		// Including pending changes.
 		Read(context.Context, VmRef) (RawConfigLXC, error)
 		ReadNoCheck(context.Context, VmRef) (RawConfigLXC, error)
+
+		// Only avalible from PVE 9.1 and onwards.
+		ReadNetworkInterfaceInfo(context.Context, VmRef) (RawLxcInfoNetworkInterfaces, error)
+		ReadNetworkInterfaceInfoNoCheck(context.Context, VmRef) (RawLxcInfoNetworkInterfaces, error)
 	}
 
 	lxcGuestClient struct {
@@ -39,6 +43,26 @@ func (c *lxcGuestClient) ReadNoCheck(ctx context.Context, vmr VmRef) (RawConfigL
 		return nil, err
 	}
 	return LxcRef{ID: vmr.vmId, Node: vmr.node}.read(ctx, c.api, version)
+}
+
+const Error_ReadNetworkInterfaceStatus_Version = "lxc network information not avalible before PVE 9.1"
+
+func (c *lxcGuestClient) ReadNetworkInterfaceInfo(ctx context.Context, vmr VmRef) (RawLxcInfoNetworkInterfaces, error) {
+	version, err := c.oldClient.Version(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if version.Encode() < version_9_1_0 {
+		return nil, errors.New(Error_ReadNetworkInterfaceStatus_Version)
+	}
+	if _, err = vmr.check_unsafe(ctx, c.api); err != nil {
+		return nil, err
+	}
+	return c.ReadNetworkInterfaceInfoNoCheck(ctx, vmr)
+}
+
+func (c *lxcGuestClient) ReadNetworkInterfaceInfoNoCheck(ctx context.Context, vmr VmRef) (RawLxcInfoNetworkInterfaces, error) {
+	return LxcRef{ID: vmr.vmId, Node: vmr.node}.readInterfaceStatus(ctx, c.api)
 }
 
 type LxcCpuArchitecture string

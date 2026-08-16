@@ -3,7 +3,6 @@ package proxmox
 import (
 	"context"
 	"net"
-	"strconv"
 	"strings"
 )
 
@@ -160,7 +159,7 @@ func agentMapToSdkIpAddresses(params map[string]any) []net.IP {
 		ips := make([]net.IP, len(RawIPs))
 		for i := range RawIPs {
 			ip := RawIPs[i].(map[string]any)
-			ips[i], _, _ = net.ParseCIDR(ip["ip-address"].(string) + "/" + strconv.FormatInt(int64(ip["prefix"].(float64)), 10))
+			ips[i] = net.ParseIP(ip["ip-address"].(string))
 		}
 		return ips
 	}
