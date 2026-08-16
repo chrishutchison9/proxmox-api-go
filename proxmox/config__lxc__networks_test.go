@@ -10,11 +10,6 @@ import (
 )
 
 func testData_RawConfigLXC_Networks_Get() lxcTestGetFunc {
-	parseMAC := func(rawMAC string) net.HardwareAddr {
-		mac, err := net.ParseMAC(rawMAC)
-		failPanic(err)
-		return mac
-	}
 	baseConfig := func(config ConfigLXC) *ConfigLXC {
 		return lxcGetBaseConfig(config)
 	}
@@ -160,11 +155,6 @@ func testData_RawConfigLXC_Networks_Get() lxcTestGetFunc {
 
 func Test_ConfigLXC_LxcNetworks_MapToApi(t *testing.T) {
 	t.Parallel()
-	parseMAC := func(rawMAC string) net.HardwareAddr {
-		mac, err := net.ParseMAC(rawMAC)
-		failPanic(err)
-		return mac
-	}
 	network := func() LxcNetwork {
 		return LxcNetwork{
 			Bridge:    new("vmbr0"),

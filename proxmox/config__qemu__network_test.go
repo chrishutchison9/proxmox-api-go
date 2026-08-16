@@ -10,10 +10,6 @@ import (
 
 func testData_RawConfigQemu_Networks_Get() qemuTestGetFunc {
 	return func() []qemuTestCaseGet {
-		parseMAC := func(rawMAC string) (mac net.HardwareAddr) {
-			mac, _ = net.ParseMAC(rawMAC)
-			return
-		}
 		return []qemuTestCaseGet{
 			{name: `all e1000`,
 				input: map[string]interface{}{"net0": "e1000=BC:24:11:E1:BB:5d,bridge=vmbr0,mtu=1395,firewall=1,link_down=1,queues=23,rate=1.53,tag=12,trunks=34;18;25"},
@@ -249,11 +245,6 @@ func testData_RawConfigQemu_Networks_Get() qemuTestGetFunc {
 
 func Test_ConfigQemu_QemuNetworkInterfaces_MapToApi(t *testing.T) {
 	t.Parallel()
-	parseMAC := func(rawMAC string) net.HardwareAddr {
-		mac, err := net.ParseMAC(rawMAC)
-		failPanic(err)
-		return mac
-	}
 	networkInterface := func() QemuNetworkInterface {
 		return QemuNetworkInterface{
 			Bridge:        new("vmbr0"),

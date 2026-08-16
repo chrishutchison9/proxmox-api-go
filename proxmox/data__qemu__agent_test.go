@@ -9,10 +9,6 @@ import (
 
 func Test_rawAgentNetworkInterfaces_SelectMacAddress(t *testing.T) {
 	t.Parallel()
-	parseMAC := func(mac string) net.HardwareAddr {
-		parsedMac, _ := net.ParseMAC(mac)
-		return parsedMac
-	}
 	testInput := func() map[string]any {
 		return map[string]any{
 			"result": []any{
@@ -64,10 +60,6 @@ func Test_rawAgentNetworkInterfaces_SelectMacAddress(t *testing.T) {
 
 func Test_rawAgentNetworkInterfaces_SelectName(t *testing.T) {
 	t.Parallel()
-	parseMAC := func(mac string) net.HardwareAddr {
-		parsedMac, _ := net.ParseMAC(mac)
-		return parsedMac
-	}
 	testInput := func() map[string]any {
 		return map[string]any{
 			"result": []any{
@@ -119,12 +111,8 @@ func Test_rawAgentNetworkInterfaces_SelectName(t *testing.T) {
 
 func Test_rawAgentNetworkInterfaces_Get(t *testing.T) {
 	t.Parallel()
-	parseMAC := func(mac string) net.HardwareAddr {
-		parsedMac, _ := net.ParseMAC(mac)
-		return parsedMac
-	}
 	parseCIDR := func(cidr string) (ip net.IP) {
-		ip, _, _ = net.ParseCIDR(cidr)
+		ip, _ = parseCIDR(cidr)
 		return
 	}
 	baseInput := func(params []any) map[string]any {

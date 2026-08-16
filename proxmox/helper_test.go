@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"net/url"
 	"strings"
 	"testing"
@@ -91,4 +92,20 @@ type mapToApiTest[V any] struct {
 	output map[string]string
 	input  V
 	name   string
+}
+
+func parseMAC(mac string) net.HardwareAddr {
+	parsedMac, err := net.ParseMAC(mac)
+	if err != nil {
+		panic(err)
+	}
+	return parsedMac
+}
+
+func parseCIDR(cidr string) (net.IP, *net.IPNet) {
+	ip, net, err := net.ParseCIDR(cidr)
+	if err != nil {
+		panic(err)
+	}
+	return ip, net
 }
